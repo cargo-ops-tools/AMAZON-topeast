@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateReviewScore, type ReviewScoreInput } from "./reviewScore";
+import { calculateReviewScore, calculateReviewScoreScenario, type ReviewScoreInput } from "./reviewScore";
 
 const samples: Array<{ input: ReviewScoreInput; raw: number; display: number }> = [
   {
@@ -69,5 +69,63 @@ describe("calculateReviewScore", () => {
     expect(result.totalCount).toBe(2);
     expect(result.totalPoints).toBe(10);
     expect(result.displayScore).toBe(5);
+  });
+
+  it("calculates the minimum five-star reviews needed to reach a target display score", () => {
+    const result = calculateReviewScore({
+      review: { 5: 7, 4: 3, 3: 0, 2: 0, 1: 0 },
+      rating: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+    });
+    const scenario = calculateReviewScoreScenario(result, 4.8);
+
+    expect(result.displayScore).toBe(4.7);
+    expect(scenario.additionalFiveStarsNeeded).toBe(3);
+    const improved = calculateReviewScore({
+      review: { 5: 10, 4: 3, 3: 0, 2: 0, 1: 0 },
+      rating: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+    });
+    expect(improved.displayScore).toBe(4.8);
+  });
+
+  it("calculates how many one-star reviews can be absorbed before the display score drops", () => {
+    const result = calculateReviewScore({
+      review: { 5: 9, 4: 1, 3: 0, 2: 0, 1: 0 },
+      rating: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+    });
+    const scenario = calculateReviewScoreScenario(result, 4.9);
+
+    expect(result.displayScore).toBe(4.9);
+    expect(scenario.oneStarCapacityBeforeDrop).toBe(0);
+    expect(scenario.nextLowerDisplayScore).toBe(4.5);
+  });
+
+  it("returns an unavailable scenario for empty data", () => {
+    const result = calculateReviewScore({
+      review: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+      rating: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+    });
+    expect(calculateReviewScoreScenario(result).additionalFiveStarsNeeded).toBeNull();
+  });
+
+  it("moves past an exact half-tenth boundary when calculating five-star needs", () => {
+    const result = calculateReviewScore({
+      review: { 5: 5, 4: 9, 3: 0, 2: 0, 1: 0 },
+      rating: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+    });
+    expect(result.totalPoints).toBe(61);
+    expect(result.displayScore).toBe(4.4);
+    expect(calculateReviewScoreScenario(result, 4.6).additionalFiveStarsNeeded).toBe(7);
+  });
+
+  it("does not count an exact half-tenth one-star boundary as remaining capacity", () => {
+    const result = calculateReviewScore({
+      review: { 5: 25, 4: 14, 3: 0, 2: 0, 1: 0 },
+      rating: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+    });
+    expect(result.totalPoints).toBe(181);
+    expect(result.displayScore).toBe(4.6);
+    const scenario = calculateReviewScoreScenario(result, 4.8);
+    expect(scenario.oneStarCapacityBeforeDrop).toBe(0);
+    expect(scenario.nextLowerDisplayScore).toBe(4.5);
   });
 });

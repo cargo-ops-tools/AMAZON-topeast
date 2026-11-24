@@ -4,19 +4,25 @@ import {
   BarChart3,
   Beaker,
   Calculator,
+  Check,
+  Clipboard,
+  Download,
   Info,
   RotateCcw,
   Star,
+  Target,
 } from "lucide-react";
 import {
   EMPTY_STAR_COUNTS,
   STARS,
   calculateReviewScore,
+  calculateReviewScoreScenario,
   type ReviewScoreInput,
   type Star as ScoreStar,
   type StarCounts,
 } from "./lib/reviewScore";
 import { numberInputValue } from "./lib/input";
+import ListingScorePanel from "./ListingScorePanel";
 
 type ScoreGroup = keyof ReviewScoreInput;
 
@@ -51,7 +57,14 @@ function formatPercent(value: number | null): string {
 
 function ReviewScoreCalculator() {
   const [input, setInput] = useState<ReviewScoreInput>(() => emptyInput());
+  const [targetDisplayScore, setTargetDisplayScore] = useState(4.5);
+  const [copied, setCopied] = useState(false);
+  const [isSample, setIsSample] = useState(false);
   const result = useMemo(() => calculateReviewScore(input), [input]);
+  const scenario = useMemo(
+    () => calculateReviewScoreScenario(result, targetDisplayScore),
+    [result, targetDisplayScore],
+  );
 
   const updateCount = (group: ScoreGroup, star: ScoreStar, value: string) => {
     setInput((current) => ({
@@ -68,29 +81,89 @@ function ReviewScoreCalculator() {
       review: cloneCounts(SAMPLE_INPUT.review),
       rating: cloneCounts(SAMPLE_INPUT.rating),
     });
+    setIsSample(true);
   };
 
-  const clear = () => setInput(emptyInput());
+  const clear = () => {
+    setInput(emptyInput());
+    setIsSample(false);
+  };
+
+  const copyResult = async () => {
+    const text = [
+      "【Review / Rating 星级推演】",
+      `数据性质：${isSample ? "演示数据，不可用于决策" : "用户录入数据"}`,
+      `经验显示分：${result.displayScore === null ? "—" : result.displayScore.toFixed(1)}`,
+      `原始均分：${formatScore(result.rawScore, 4)}`,
+      `总评分数：${result.totalCount}`,
+      `5 星占比：${formatPercent(result.fiveStarShare)}`,
+      `1–3 星占比：${formatPercent(result.lowStarShare)}`,
+      `达到 ${scenario.targetDisplayScore.toFixed(1)} 分所需新增 5 星：${scenario.additionalFiveStarsNeeded ?? "—"}`,
+      `掉档前可承受新增 1 星：${scenario.oneStarCapacityBeforeDrop ?? "—"}`,
+      `超过承压数后的显示分：${scenario.nextLowerDisplayScore === null ? "—" : scenario.nextLowerDisplayScore.toFixed(1)}`,
+      "说明：经验估算，不等同于 Amazon 官方评分算法。",
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const exportCsv = () => {
+    const rows = [
+      ["项目", "结果"],
+      ["数据性质", isSample ? "演示数据，不可用于决策" : "用户录入数据"],
+      ["经验显示分", result.displayScore ?? ""],
+      ["原始均分", result.rawScore ?? ""],
+      ["总评分数", result.totalCount],
+      ["Review 数", result.review.count],
+      ["仅点星 Rating 数", result.rating.count],
+      ["5 星占比", result.fiveStarShare === null ? "" : `${(result.fiveStarShare * 100).toFixed(1)}%`],
+      ["1-3 星占比", result.lowStarShare === null ? "" : `${(result.lowStarShare * 100).toFixed(1)}%`],
+      [`达到 ${scenario.targetDisplayScore.toFixed(1)} 所需新增 5 星`, scenario.additionalFiveStarsNeeded ?? ""],
+      ["掉档前可承受新增 1 星", scenario.oneStarCapacityBeforeDrop ?? ""],
+      ["超过承压数后的显示分", scenario.nextLowerDisplayScore ?? ""],
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "review-rating-scenario.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <main className="review-score-main">
       <header className="topbar review-score-topbar">
         <div>
-          <div className="eyebrow">板块六 · REVIEW SCORE ESTIMATOR</div>
-          <h1>链接评分计算</h1>
-          <p>合并 VP Review 与 VP 点星 Rating，估算链接原始均分及前台显示分</p>
+          <div className="eyebrow">板块六 · LISTING BUSINESS SCORE</div>
+          <h1>链接经营评分</h1>
+          <p>六维 100 分经营评分、S/A/B/C 链接规划与 Review/Rating 情景推演</p>
         </div>
         <div className="review-score-top-actions">
-          <button className="rule-link" type="button" onClick={applySample}>
-            <Beaker size={15} /> 填入验证样本
-          </button>
-          <button className="icon-button" type="button" onClick={clear} title="清空数据" aria-label="清空数据">
-            <RotateCcw size={17} />
-          </button>
+          <button className="rule-link" type="button" onClick={() => document.getElementById("listing-health")?.scrollIntoView({ behavior: "smooth" })}><Target size={15} /> 经营评分</button>
+          <button className="rule-link" type="button" onClick={() => document.getElementById("review-rating")?.scrollIntoView({ behavior: "smooth" })}><Star size={15} /> Review 推演</button>
         </div>
       </header>
 
       <div className="review-score-page">
+        <ListingScorePanel />
+
+        <div className="review-tool-divider" id="review-rating">
+          <div><span>REVIEW / RATING SCENARIO</span><h2>评价星级推演</h2><p>计算当前经验分、升档所需 5 星数与低星承压空间</p></div>
+          <div><button type="button" onClick={applySample}><Beaker size={16} /> 填入示例</button><button type="button" onClick={clear}><RotateCcw size={16} /> 清空</button></div>
+        </div>
+
+        {isSample && (
+          <div className="listing-sample-banner" role="status">
+            <Info size={17} /> 当前 Review/Rating 区域包含演示数据；即使局部修改也不可用于真实链接判断，请清空后录入同一 ASIN 的可拆分数据。
+          </div>
+        )}
+
         <section className="review-score-hero" aria-live="polite">
           <div className="review-score-primary">
             <span>预计亚马逊前台显示</span>
@@ -111,21 +184,21 @@ function ReviewScoreCalculator() {
               <Calculator size={18} />
               <div>
                 <h2 id="review-score-input-title">星级数量录入</h2>
-                <p>Review 为 VP 文字评论；Rating 为仅点星评分</p>
+                <p>Review 为文字评论；Rating 仅填“不含文字 Review”的点星记录，避免重复计算</p>
               </div>
             </div>
 
             <div className="score-input-table">
               <div className="score-input-head">
                 <span>星级</span>
-                <span>VP Review</span>
-                <span>VP Rating</span>
+                <span>Review</span>
+                <span>仅点星 Rating</span>
               </div>
               {STARS.map((star) => (
                 <div className="score-input-row" key={star}>
                   <span className="score-star-label"><Star size={14} fill="currentColor" /> {star} 星</span>
                   <label>
-                    <span className="sr-only">{star} 星 VP Review 数量</span>
+                    <span className="sr-only">{star} 星 Review 数量</span>
                     <input
                       type="number"
                       min="0"
@@ -137,7 +210,7 @@ function ReviewScoreCalculator() {
                     />
                   </label>
                   <label>
-                    <span className="sr-only">{star} 星 VP Rating 数量</span>
+                    <span className="sr-only">{star} 星仅点星 Rating 数量</span>
                     <input
                       type="number"
                       min="0"
@@ -160,11 +233,15 @@ function ReviewScoreCalculator() {
 
           <div className="review-score-results">
             <section className="review-score-panel" aria-labelledby="score-overview-title">
-              <div className="review-score-heading">
+              <div className="review-score-heading review-result-heading">
                 <BarChart3 size={18} />
                 <div>
                   <h2 id="score-overview-title">计算结果</h2>
-                  <p>两组数据等权汇总，不额外放大 Review 权重</p>
+                  <p>每条星级记录等权合并，不额外放大 Review 权重</p>
+                </div>
+                <div className="review-result-actions" aria-live="polite">
+                  <button type="button" onClick={copyResult} disabled={!result.totalCount}>{copied ? <Check size={15} /> : <Clipboard size={15} />}{copied ? "已复制" : "复制"}</button>
+                  <button type="button" onClick={exportCsv} disabled={!result.totalCount}><Download size={15} /> CSV</button>
                 </div>
               </div>
 
@@ -183,6 +260,23 @@ function ReviewScoreCalculator() {
                   <b>(Review 总星分 + Rating 总星分) ÷ (Review 数量 + Rating 数量)</b>
                 </div>
                 <strong>{result.totalCount ? `${result.totalPoints} ÷ ${result.totalCount} = ${formatScore(result.rawScore, 4)}` : "等待录入数据"}</strong>
+              </div>
+
+              <div className="review-scenario-block">
+                <div className="review-scenario-heading">
+                  <div><span>情景目标</span><strong>升档与低星承压</strong></div>
+                  <label>
+                    <span>目标显示分</span>
+                    <select value={targetDisplayScore} onChange={(event) => setTargetDisplayScore(Number(event.target.value))}>
+                      {[4, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5].map((score) => <option key={score} value={score}>{score.toFixed(1)}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="review-scenario-metrics">
+                  <div><span>达到 {scenario.targetDisplayScore.toFixed(1)} 需新增 5 星</span><strong>{scenario.additionalFiveStarsNeeded ?? "—"}<small> 个</small></strong></div>
+                  <div><span>当前分数掉档前可承受 1 星</span><strong>{scenario.oneStarCapacityBeforeDrop ?? "—"}<small> 个</small></strong></div>
+                  <div><span>超过承压数后的显示分</span><strong>{scenario.nextLowerDisplayScore === null ? "—" : scenario.nextLowerDisplayScore.toFixed(1)}</strong></div>
+                </div>
               </div>
             </section>
 
@@ -221,7 +315,7 @@ function ReviewScoreCalculator() {
               <Info size={17} />
               <div>
                 <b>估算口径说明</b>
-                <span>Amazon 未公开完整评分权重。前台结果还可能受评论可信度、时间衰减、异常评价过滤、变体合并及数据同步延迟影响，本工具适合运营预判，不用于反推官方精确算法。</span>
+                <span>Amazon 未公开完整评分权重。前台总 Rating 可能已包含文字 Review，只有能拆分两组数据时才分别录入。结果还可能受可信度、时间衰减、异常评价过滤、变体合并及同步延迟影响，本工具适合运营预判，不用于反推官方精确算法。</span>
               </div>
             </div>
           </div>

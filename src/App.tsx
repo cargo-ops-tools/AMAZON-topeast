@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -74,18 +74,61 @@ const PERIOD_LABELS = {
   peak: "2026 旺季",
 };
 
+const MODULE_IDS = [
+  "fba",
+  "packing",
+  "inventory",
+  "profit",
+  "first-mile",
+  "review-score",
+  "simulation",
+  "cargo-declaration",
+  "hourly-ads",
+  "advertising-estimator",
+] as const;
+
+type ModuleId = (typeof MODULE_IDS)[number];
+
+function moduleFromHash(): ModuleId {
+  if (typeof window === "undefined") return "simulation";
+  const candidate = window.location.hash.replace(/^#\/?/, "") as ModuleId;
+  return MODULE_IDS.includes(candidate) ? candidate : "simulation";
+}
+
 function positiveNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
 }
 
 function App() {
-  const [activeModule, setActiveModule] = useState<"fba" | "packing" | "inventory" | "profit" | "first-mile" | "review-score" | "simulation" | "cargo-declaration" | "hourly-ads" | "advertising-estimator">("simulation");
+  const [activeModule, setActiveModule] = useState<ModuleId>(moduleFromHash);
+  const moduleNavRef = useRef<HTMLElement>(null);
   const [firstMileTransfer, setFirstMileTransfer] = useState<FirstMileTransfer | null>(null);
   const [input, setInput] = useState(DEFAULT_INPUT);
   const [copied, setCopied] = useState(false);
   const result = useMemo(() => calculateFba(input), [input]);
   const { classification, fee } = result;
+
+  useEffect(() => {
+    const syncFromHash = () => setActiveModule(moduleFromHash());
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    if (!window.matchMedia("(max-width: 620px)").matches) return;
+    const activeButton = moduleNavRef.current?.querySelector<HTMLButtonElement>(".nav-item.active");
+    if (activeButton && moduleNavRef.current) {
+      moduleNavRef.current.scrollTo({ left: Math.max(0, activeButton.offsetLeft - 8), behavior: "smooth" });
+    }
+  }, [activeModule]);
+
+  const selectModule = (module: ModuleId) => {
+    setActiveModule(module);
+    const nextHash = `#/${module}`;
+    if (window.location.hash !== nextHash) window.location.hash = nextHash;
+  };
 
   const updateNumber = (key: "length" | "width" | "height" | "weight" | "price", value: string) => {
     setInput((current) => ({ ...current, [key]: positiveNumber(value) }));
@@ -130,54 +173,54 @@ function App() {
           </div>
         </div>
 
-        <nav className="module-nav" aria-label="工具板块">
+        <nav ref={moduleNavRef} className="module-nav" aria-label="工具板块">
           <span className="nav-label">工具板块</span>
-          <button className={`nav-item ${activeModule === "fba" ? "active" : ""}`} type="button" onClick={() => setActiveModule("fba")}>
+          <button className={`nav-item ${activeModule === "fba" ? "active" : ""}`} type="button" aria-current={activeModule === "fba" ? "page" : undefined} onClick={() => selectModule("fba")}>
             <Calculator size={18} />
             <span><b>FBA 费用测算</b><small>基础测算引擎</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "packing" ? "active" : ""}`} type="button" onClick={() => setActiveModule("packing")}>
+          <button className={`nav-item ${activeModule === "packing" ? "active" : ""}`} type="button" aria-current={activeModule === "packing" ? "page" : undefined} onClick={() => selectModule("packing")}>
             <Box size={18} />
             <span><b>发货装箱助手</b><small>平均装箱与 Shipment</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "inventory" ? "active" : ""}`} type="button" onClick={() => setActiveModule("inventory")}>
+          <button className={`nav-item ${activeModule === "inventory" ? "active" : ""}`} type="button" aria-current={activeModule === "inventory" ? "page" : undefined} onClick={() => selectModule("inventory")}>
             <Warehouse size={18} />
             <span><b>库存成本推演</b><small>仓储、移除与清货</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "profit" ? "active" : ""}`} type="button" onClick={() => setActiveModule("profit")}>
+          <button className={`nav-item ${activeModule === "profit" ? "active" : ""}`} type="button" aria-current={activeModule === "profit" ? "page" : undefined} onClick={() => selectModule("profit")}>
             <CircleDollarSign size={18} />
             <span><b>利润测算器</b><small>利润、广告与决策</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "first-mile" ? "active" : ""}`} type="button" onClick={() => setActiveModule("first-mile")}>
+          <button className={`nav-item ${activeModule === "first-mile" ? "active" : ""}`} type="button" aria-current={activeModule === "first-mile" ? "page" : undefined} onClick={() => selectModule("first-mile")}>
             <Landmark size={18} />
             <span><b>头程费用计算</b><small>运输、附加费与利润联动</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "review-score" ? "active" : ""}`} type="button" onClick={() => setActiveModule("review-score")}>
+          <button className={`nav-item ${activeModule === "review-score" ? "active" : ""}`} type="button" aria-current={activeModule === "review-score" ? "page" : undefined} onClick={() => selectModule("review-score")}>
             <Star size={18} />
-            <span><b>链接评分计算</b><small>Review 与 Rating</small></span>
+            <span><b>链接经营评分</b><small>S/A/B/C + Review</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "simulation" ? "active" : ""}`} type="button" onClick={() => setActiveModule("simulation")}>
+          <button className={`nav-item ${activeModule === "simulation" ? "active" : ""}`} type="button" aria-current={activeModule === "simulation" ? "page" : undefined} onClick={() => selectModule("simulation")}>
             <TrendingUp size={18} />
             <span><b>推演</b><small>利润、推广与回本决策</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "cargo-declaration" ? "active" : ""}`} type="button" onClick={() => setActiveModule("cargo-declaration")}>
+          <button className={`nav-item ${activeModule === "cargo-declaration" ? "active" : ""}`} type="button" aria-current={activeModule === "cargo-declaration" ? "page" : undefined} onClick={() => selectModule("cargo-declaration")}>
             <Boxes size={18} />
             <span><b>货物申报金额</b><small>40HQ 装箱与申报</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "hourly-ads" ? "active" : ""}`} type="button" onClick={() => setActiveModule("hourly-ads")}>
+          <button className={`nav-item ${activeModule === "hourly-ads" ? "active" : ""}`} type="button" aria-current={activeModule === "hourly-ads" ? "page" : undefined} onClick={() => selectModule("hourly-ads")}>
             <Clock3 size={18} />
             <span><b>广告分时分析</b><small>报表上传与时段决策</small></span>
             <ChevronRight size={16} />
           </button>
-          <button className={`nav-item ${activeModule === "advertising-estimator" ? "active" : ""}`} type="button" onClick={() => setActiveModule("advertising-estimator")}>
+          <button className={`nav-item ${activeModule === "advertising-estimator" ? "active" : ""}`} type="button" aria-current={activeModule === "advertising-estimator" ? "page" : undefined} onClick={() => selectModule("advertising-estimator")}>
             <BadgeDollarSign size={18} />
             <span><b>广告测算</b><small>竞品花费、CPC 与订单占比</small></span>
             <ChevronRight size={16} />
@@ -385,7 +428,7 @@ function App() {
       <div className="module-screen" hidden={activeModule !== "packing"}><PackingAssistant /></div>
       <div className="module-screen" hidden={activeModule !== "inventory"}><InventoryCostSimulator /></div>
       <div className="module-screen" hidden={activeModule !== "profit"}><ProfitSimulator firstMileTransfer={firstMileTransfer} onFirstMileTransferApplied={() => setFirstMileTransfer(null)} /></div>
-      <div className="module-screen" hidden={activeModule !== "first-mile"}><FirstMileCalculator onTransferToProfit={(transfer) => { setFirstMileTransfer(transfer); setActiveModule("profit"); }} /></div>
+      <div className="module-screen" hidden={activeModule !== "first-mile"}><FirstMileCalculator onTransferToProfit={(transfer) => { setFirstMileTransfer(transfer); selectModule("profit"); }} /></div>
       <div className="module-screen" hidden={activeModule !== "review-score"}><ReviewScoreCalculator /></div>
       <div className="module-screen" hidden={activeModule !== "simulation"}><ProfitDecisionDesk /></div>
       <div className="module-screen" hidden={activeModule !== "cargo-declaration"}><CargoDeclarationCalculator /></div>

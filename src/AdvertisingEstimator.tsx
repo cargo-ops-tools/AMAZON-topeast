@@ -6,11 +6,13 @@ import {
   Calculator,
   Check,
   Clipboard,
+  Download,
   Info,
   Plus,
   RotateCcw,
   Save,
   Scale,
+  ShieldCheck,
   Trash2,
   TrendingUp,
 } from "lucide-react";
@@ -18,6 +20,7 @@ import {
   calculateAdvertisingEstimate,
   type AdvertisingTarget,
   type CalibrationSample,
+  type EstimateInterval,
 } from "./lib/advertisingEstimate";
 
 const DEMO_SAMPLE: CalibrationSample = {
@@ -30,6 +33,7 @@ const DEMO_SAMPLE: CalibrationSample = {
   cpcProxy: 1.2,
   totalOrders: 600,
   adOrders: 300,
+  observationDays: 30,
 };
 
 const DEMO_TARGET: AdvertisingTarget = {
@@ -39,6 +43,9 @@ const DEMO_TARGET: AdvertisingTarget = {
   cpcProxy: 1.3,
   totalOrders: 700,
   observationDays: 30,
+  averageUnitsPerOrder: 1,
+  unitPrice: 29.99,
+  preAdUnitProfit: 9,
 };
 
 const EMPTY_SAMPLE: CalibrationSample = {
@@ -50,7 +57,20 @@ const EMPTY_SAMPLE: CalibrationSample = {
   adSpend: 0,
   cpcProxy: 0,
   totalOrders: 0,
-  adOrders: 0,
+  adOrders: null,
+  observationDays: 30,
+};
+
+const EMPTY_TARGET: AdvertisingTarget = {
+  asin: "",
+  adScore: 0,
+  organicScore: 0,
+  cpcProxy: 0,
+  totalOrders: null,
+  observationDays: 30,
+  averageUnitsPerOrder: 1,
+  unitPrice: null,
+  preAdUnitProfit: null,
 };
 
 interface SavedAdvertisingTemplate {
@@ -60,6 +80,7 @@ interface SavedAdvertisingTemplate {
   target: AdvertisingTarget;
   site: string;
   channelScope: string;
+  isDemo: boolean;
 }
 
 const TEMPLATE_STORAGE_KEY = "amazon-inventory-decision-advertising-templates";
@@ -70,14 +91,22 @@ const SITE_CURRENCY: Record<string, { code: string; symbol: string }> = {
   "Amazon DE": { code: "EUR", symbol: "€" },
 };
 
+const QUALITY_LABELS = {
+  unavailable: "不可计算",
+  low: "低可信",
+  reference: "参考级",
+  usable: "可用级",
+  "high-risk": "高风险",
+} as const;
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isCalibrationSample(value: unknown): value is CalibrationSample {
-  if (!value || typeof value !== "object") return false;
+function normalizeCalibrationSample(value: unknown): CalibrationSample | null {
+  if (!value || typeof value !== "object") return null;
   const sample = value as Partial<CalibrationSample>;
-  return typeof sample.id === "string"
+  const valid = typeof sample.id === "string"
     && typeof sample.name === "string"
     && isFiniteNumber(sample.adScore)
     && isFiniteNumber(sample.organicScore)
@@ -85,37 +114,69 @@ function isCalibrationSample(value: unknown): value is CalibrationSample {
     && isFiniteNumber(sample.adSpend)
     && isFiniteNumber(sample.cpcProxy)
     && isFiniteNumber(sample.totalOrders)
-    && isFiniteNumber(sample.adOrders);
+    && (sample.adOrders === null || sample.adOrders === undefined || isFiniteNumber(sample.adOrders));
+  if (!valid) return null;
+  return {
+    id: sample.id!,
+    name: sample.name!,
+    adScore: sample.adScore!,
+    organicScore: sample.organicScore!,
+    adClicks: sample.adClicks!,
+    adSpend: sample.adSpend!,
+    cpcProxy: sample.cpcProxy!,
+    totalOrders: sample.totalOrders!,
+    adOrders: sample.adOrders === null || sample.adOrders === undefined ? null : sample.adOrders,
+    observationDays: isFiniteNumber(sample.observationDays) && sample.observationDays > 0 ? sample.observationDays : 0,
+  };
 }
 
-function isAdvertisingTarget(value: unknown): value is AdvertisingTarget {
-  if (!value || typeof value !== "object") return false;
+function normalizeAdvertisingTarget(value: unknown): AdvertisingTarget | null {
+  if (!value || typeof value !== "object") return null;
   const target = value as Partial<AdvertisingTarget>;
-  return typeof target.asin === "string"
+  const valid = typeof target.asin === "string"
     && isFiniteNumber(target.adScore)
     && isFiniteNumber(target.organicScore)
     && isFiniteNumber(target.cpcProxy)
     && (target.totalOrders === null || isFiniteNumber(target.totalOrders))
-    && isFiniteNumber(target.observationDays);
+    && (target.observationDays === null || target.observationDays === undefined || isFiniteNumber(target.observationDays));
+  if (!valid) return null;
+  return {
+    asin: target.asin!,
+    adScore: target.adScore!,
+    organicScore: target.organicScore!,
+    cpcProxy: target.cpcProxy!,
+    totalOrders: target.totalOrders!,
+    observationDays: isFiniteNumber(target.observationDays) && target.observationDays > 0 ? target.observationDays : 0,
+    averageUnitsPerOrder: isFiniteNumber(target.averageUnitsPerOrder) && target.averageUnitsPerOrder > 0 ? target.averageUnitsPerOrder : 1,
+    unitPrice: target.unitPrice === null || target.unitPrice === undefined ? null : isFiniteNumber(target.unitPrice) ? target.unitPrice : null,
+    preAdUnitProfit: target.preAdUnitProfit === null || target.preAdUnitProfit === undefined ? null : isFiniteNumber(target.preAdUnitProfit) ? target.preAdUnitProfit : null,
+  };
 }
 
-function isSavedAdvertisingTemplate(value: unknown): value is SavedAdvertisingTemplate {
-  if (!value || typeof value !== "object") return false;
+function normalizeSavedAdvertisingTemplate(value: unknown): SavedAdvertisingTemplate | null {
+  if (!value || typeof value !== "object") return null;
   const item = value as Partial<SavedAdvertisingTemplate>;
-  return typeof item.id === "string"
+  if (!(typeof item.id === "string"
     && typeof item.name === "string"
     && Array.isArray(item.samples)
-    && item.samples.every(isCalibrationSample)
-    && isAdvertisingTarget(item.target)
     && typeof item.site === "string"
-    && typeof item.channelScope === "string";
+    && typeof item.channelScope === "string")) return null;
+  const samples = item.samples.map(normalizeCalibrationSample).filter((sample): sample is CalibrationSample => sample !== null);
+  const target = normalizeAdvertisingTarget(item.target);
+  if (samples.length !== item.samples.length || target === null) return null;
+  const legacyDemo = item.isDemo === undefined
+    && target.asin === DEMO_TARGET.asin
+    && samples.some((sample) => sample.name === DEMO_SAMPLE.name);
+  return { id: item.id, name: item.name, samples, target, site: item.site, channelScope: item.channelScope, isDemo: item.isDemo === true || legacyDemo };
 }
 
 function readSavedTemplates(): SavedAdvertisingTemplate[] {
   if (typeof window === "undefined") return [];
   try {
     const value = JSON.parse(window.localStorage.getItem(TEMPLATE_STORAGE_KEY) ?? "[]") as unknown;
-    return Array.isArray(value) ? value.filter(isSavedAdvertisingTemplate) : [];
+    return Array.isArray(value)
+      ? value.map(normalizeSavedAdvertisingTemplate).filter((item): item is SavedAdvertisingTemplate => item !== null)
+      : [];
   } catch {
     return [];
   }
@@ -137,9 +198,25 @@ function formatPercent(value: number | null, digits = 1): string {
   return `${formatNumber(value * 100, digits)}%`;
 }
 
+function formatInterval(interval: EstimateInterval, formatter: (value: number | null) => string): string {
+  if (interval.p25 === null || interval.p75 === null) return "—";
+  return `${formatter(interval.p25)} – ${formatter(interval.p75)}`;
+}
+
+function formatCsvNumber(value: number | null, digits = 2): string {
+  return value === null || !Number.isFinite(value) ? "" : value.toFixed(digits);
+}
+
 function numericValue(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function optionalNumericValue(value: string, clampToZero = true): number | null {
+  if (value.trim() === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return clampToZero ? Math.max(0, parsed) : parsed;
 }
 
 function newSampleId(): string {
@@ -157,22 +234,20 @@ function ResultMetric({ label, value, detail, tone = "default" }: { label: strin
 }
 
 function AdvertisingEstimator() {
-  const [samples, setSamples] = useState<CalibrationSample[]>([DEMO_SAMPLE]);
-  const [target, setTarget] = useState<AdvertisingTarget>(DEMO_TARGET);
+  const [samples, setSamples] = useState<CalibrationSample[]>([{ ...EMPTY_SAMPLE }]);
+  const [target, setTarget] = useState<AdvertisingTarget>({ ...EMPTY_TARGET });
   const [site, setSite] = useState("Amazon US");
-  const [channelScope, setChannelScope] = useState("SP CPC");
+  const [channelScope, setChannelScope] = useState("Sponsored Products · Keyword");
   const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [isDemo, setIsDemo] = useState(false);
   const [savedTemplates, setSavedTemplates] = useState<SavedAdvertisingTemplate[]>(readSavedTemplates);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateName, setTemplateName] = useState("我的广告测算样板");
 
   const result = useMemo(() => calculateAdvertisingEstimate(samples, target), [samples, target]);
   const currency = SITE_CURRENCY[site];
-  const resultStatus = result.target.estimatedSpend === null
-    ? "待校准"
-    : result.target.adOrderShare === null
-      ? "部分可算"
-      : "可计算";
+  const resultStatus = QUALITY_LABELS[result.quality.level];
 
   useEffect(() => {
     try {
@@ -190,19 +265,26 @@ function AdvertisingEstimator() {
     setTarget((current) => ({ ...current, [key]: value }));
   };
 
-  const addSample = () => setSamples((current) => [...current, { ...EMPTY_SAMPLE, id: newSampleId(), name: `校准样本 ${current.length + 1}` }]);
-  const removeSample = (id: string) => setSamples((current) => current.length > 1 ? current.filter((sample) => sample.id !== id) : current);
+  const addSample = () => {
+    setSamples((current) => [...current, { ...EMPTY_SAMPLE, id: newSampleId(), name: `校准样本 ${current.length + 1}` }]);
+  };
+  const removeSample = (id: string) => {
+    setSamples((current) => current.length > 1 ? current.filter((sample) => sample.id !== id) : current);
+  };
   const loadDemo = () => {
     setSamples([{ ...DEMO_SAMPLE, id: newSampleId() }]);
     setTarget(DEMO_TARGET);
     setSite("Amazon US");
-    setChannelScope("SP CPC");
+    setChannelScope("Sponsored Products · Keyword");
     setSelectedTemplateId("");
+    setIsDemo(true);
   };
   const clearAll = () => {
     setSamples([{ ...EMPTY_SAMPLE, id: newSampleId() }]);
-    setTarget({ ...DEMO_TARGET, asin: "", adScore: 0, organicScore: 0, cpcProxy: 0, totalOrders: null });
+    setTarget({ ...EMPTY_TARGET });
     setSelectedTemplateId("");
+    setIsDemo(false);
+    setFeedback("");
   };
 
   const saveTemplate = () => {
@@ -214,10 +296,13 @@ function AdvertisingEstimator() {
       target: { ...target },
       site,
       channelScope,
+      isDemo,
     };
     setSavedTemplates((current) => [...current.filter((item) => item.id !== id), nextTemplate]);
     setSelectedTemplateId(id);
     setTemplateName(nextTemplate.name);
+    setFeedback("样板已保存在当前浏览器");
+    window.setTimeout(() => setFeedback(""), 1800);
   };
 
   const loadTemplate = (id: string) => {
@@ -232,12 +317,15 @@ function AdvertisingEstimator() {
     setTarget({ ...template.target });
     setSite(template.site);
     setChannelScope(template.channelScope);
+    setIsDemo(template.isDemo);
   };
 
   const deleteTemplate = () => {
     if (!selectedTemplateId) return;
+    if (!window.confirm("确认删除当前广告测算样板？此操作只影响当前浏览器。")) return;
     setSavedTemplates((current) => current.filter((item) => item.id !== selectedTemplateId));
     setSelectedTemplateId("");
+    setFeedback("样板已删除");
   };
 
   const copyResult = async () => {
@@ -246,13 +334,22 @@ function AdvertisingEstimator() {
       `站点/渠道：${site} / ${channelScope}`,
       `竞品：${target.asin || "未填写"}`,
       `币种：${currency?.code ?? "未指定"}`,
+      `平均每单件数：${formatNumber(target.averageUnitsPerOrder, 2)}`,
+      `数据性质：${isDemo ? "演示数据，不可用于决策" : "用户录入数据"}`,
+      `模型质量：${QUALITY_LABELS[result.quality.level]}（点击/CPC/订单样本 ${result.quality.sampleCounts.click}/${result.quality.sampleCounts.cpc}/${result.quality.sampleCounts.order}）`,
       `估算观察期广告花费：${formatMoney(result.target.estimatedSpend, site)}`,
+      `广告花费组合情景 P25–P75：${formatInterval(result.target.intervals.estimatedSpend, (value) => formatMoney(value, site))}`,
       `估算日均广告花费：${formatMoney(result.target.estimatedDailySpend, site)}`,
       `估算 CPC：${formatMoney(result.target.estimatedCpc, site)}`,
       `广告归因订单占比：${formatPercent(result.target.adOrderShare)}`,
       `非广告归因订单占比：${formatPercent(result.target.nonAdOrderShare)}`,
       `估算广告订单：${formatNumber(result.target.estimatedAdOrders, 1)}`,
       `估算非广告归因订单：${formatNumber(result.target.estimatedNonAdOrders, 1)}`,
+      `估算 ACOS：${formatPercent(result.target.acos)}`,
+      `估算 TACoS：${formatPercent(result.target.tacos)}`,
+      `Break-even ACOS：${formatPercent(result.target.breakEvenAcos)}`,
+      `最大安全 CPC：${formatMoney(result.target.maxSafeCpc, site)}`,
+      `广告后利润：${formatMoney(result.target.profitAfterAds, site)}`,
       "结果类型：Modeled_Estimate，不等同于竞品后台真实报表。",
     ].join("\n");
     try {
@@ -262,6 +359,33 @@ function AdvertisingEstimator() {
     } catch {
       setCopied(false);
     }
+  };
+
+  const exportCsv = () => {
+    const rows = [
+      ["项目", "组合情景 P25", "P50/点估算", "组合情景 P75", "说明"],
+      ["站点/渠道", "", `${site} / ${channelScope}`, "", ""],
+      ["竞品", "", target.asin || "未填写", "", ""],
+      ["平均每单件数", "", formatCsvNumber(target.averageUnitsPerOrder), "", "经营指标按单件售价/利润换算"],
+      ["数据性质", "", isDemo ? "演示数据，不可用于决策" : "用户录入数据", "", ""],
+      ["模型质量", "", QUALITY_LABELS[result.quality.level], "", `点击/CPC/订单样本 ${result.quality.sampleCounts.click}/${result.quality.sampleCounts.cpc}/${result.quality.sampleCounts.order}`],
+      ["观察期广告花费", formatCsvNumber(result.target.intervals.estimatedSpend.p25), formatCsvNumber(result.target.estimatedSpend), formatCsvNumber(result.target.intervals.estimatedSpend.p75), currency?.code ?? ""],
+      ["日均广告花费", formatCsvNumber(result.target.intervals.estimatedDailySpend.p25), formatCsvNumber(result.target.estimatedDailySpend), formatCsvNumber(result.target.intervals.estimatedDailySpend.p75), currency?.code ?? ""],
+      ["CPC", formatCsvNumber(result.target.intervals.estimatedCpc.p25), formatCsvNumber(result.target.estimatedCpc), formatCsvNumber(result.target.intervals.estimatedCpc.p75), currency?.code ?? ""],
+      ["广告订单占比", formatPercent(result.target.intervals.adOrderShare.p25), formatPercent(result.target.adOrderShare), formatPercent(result.target.intervals.adOrderShare.p75), ""],
+      ["ACOS", "", formatPercent(result.target.acos), "", ""],
+      ["TACoS", "", formatPercent(result.target.tacos), "", ""],
+      ["Break-even ACOS", "", formatPercent(result.target.breakEvenAcos), "", ""],
+      ["最大安全 CPC", "", formatCsvNumber(result.target.maxSafeCpc), "", currency?.code ?? ""],
+      ["广告后利润", "", formatCsvNumber(result.target.profitAfterAds), "", currency?.code ?? ""],
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `advertising-estimate-${target.asin.trim() || "result"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -286,11 +410,13 @@ function AdvertisingEstimator() {
             <p>先用真实广告报表校准点击尺度、CPC 尺度和订单倾向，再把竞品 A/O 得分带入。所有金额与比例都保留为模型估算，不冒充后台实测。</p>
           </div>
           <div className="ad-estimator-hero-status">
-            <div><span>校准样本</span><b>{samples.length} 个</b></div>
             <div><span>有效样本</span><b>{result.validSampleCount} 个</b></div>
-            <div><span>结果状态</span><b><Check size={14} /> {resultStatus}</b></div>
+            <div><span>点击 / CPC / 订单</span><b>{result.quality.sampleCounts.click} / {result.quality.sampleCounts.cpc} / {result.quality.sampleCounts.order}</b></div>
+            <div><span>模型质量</span><b><ShieldCheck size={15} /> {resultStatus}</b></div>
           </div>
         </section>
+
+        {isDemo && <div className="ad-demo-banner" role="status"><AlertTriangle size={17} /><strong>当前包含演示数据</strong><span>即使局部修改，仍不可直接用于预算、竞品判断或采购决策。请清空并替换为同站点、同渠道、同窗口的真实校准数据。</span></div>}
 
         <section className="ad-template-bar" aria-label="广告测算样板">
           <div className="ad-template-title"><Bookmark size={16} /><div><strong>我的输入样板</strong><span>保存在当前浏览器，可随时恢复</span></div></div>
@@ -299,6 +425,7 @@ function AdvertisingEstimator() {
             <button className="ad-secondary-button" type="button" onClick={saveTemplate}><Save size={15} /> 保存样板</button>
             <label className="ad-template-select"><span className="sr-only">选择已保存样板</span><select value={selectedTemplateId} onChange={(event) => loadTemplate(event.target.value)}><option value="">选择已保存样板</option>{savedTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>
             <button className="icon-button" type="button" onClick={deleteTemplate} disabled={!selectedTemplateId} title="删除已选样板" aria-label="删除已选样板"><Trash2 size={15} /></button>
+            <span className="ad-template-feedback" aria-live="polite">{feedback}</span>
           </div>
         </section>
 
@@ -311,7 +438,7 @@ function AdvertisingEstimator() {
             <div className="ad-form">
               <div className="ad-form-grid two">
                 <label className="ad-field"><span>站点</span><select value={site} onChange={(event) => setSite(event.target.value)}><option>Amazon US</option><option>Amazon CA</option><option>Amazon UK</option><option>Amazon DE</option><option>其他站点</option></select></label>
-                <label className="ad-field"><span>渠道范围</span><input value={channelScope} onChange={(event) => setChannelScope(event.target.value)} placeholder="例如：SP CPC" /></label>
+                <label className="ad-field"><span>渠道范围</span><select value={channelScope} onChange={(event) => setChannelScope(event.target.value)}><option>Sponsored Products · Keyword</option><option>Sponsored Products · Product Targeting</option><option>Sponsored Brands</option><option>Sponsored Display</option><option>混合渠道（仅同口径）</option><option value="SP CPC">SP CPC（旧样板）</option>{!["Sponsored Products · Keyword", "Sponsored Products · Product Targeting", "Sponsored Brands", "Sponsored Display", "混合渠道（仅同口径）", "SP CPC"].includes(channelScope) && <option value={channelScope}>{channelScope}（旧样板）</option>}</select></label>
               </div>
               <label className="ad-field"><span>竞品 ASIN 或备注</span><input value={target.asin} onChange={(event) => updateTarget("asin", event.target.value)} placeholder="例如：B0XXXXXXX" /></label>
               <div className="ad-form-grid two">
@@ -322,20 +449,30 @@ function AdvertisingEstimator() {
                 <label className="ad-field"><span>竞品 CPC 代理 b*</span><div className="ad-input-prefix"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={target.cpcProxy || ""} onChange={(event) => updateTarget("cpcProxy", numericValue(event.target.value))} /></div><small>来自同范围关键词篮子</small></label>
                 <label className="ad-field"><span>有效观察天数 D</span><input type="number" min="1" step="1" value={target.observationDays || ""} onChange={(event) => updateTarget("observationDays", numericValue(event.target.value))} /><small>用于日均花费，不等于固定月化</small></label>
               </div>
-              <label className="ad-field"><span>竞品同口径总订单 Q <em>可选</em></span><input type="number" min="0" step="1" value={target.totalOrders ?? ""} onChange={(event) => updateTarget("totalOrders", event.target.value === "" ? null : numericValue(event.target.value))} placeholder="没有可靠 Q 时留空" /><small>只有 Q 可用且口径匹配，才计算广告单数量</small></label>
+              <div className="ad-form-grid two">
+                <label className="ad-field"><span>竞品同口径总订单 Q <em>可选</em></span><input type="number" min="0" step="1" value={target.totalOrders ?? ""} onChange={(event) => updateTarget("totalOrders", optionalNumericValue(event.target.value))} placeholder="没有可靠 Q 时留空" /><small>用于广告单数、CVR 与 TACoS</small></label>
+                <label className="ad-field"><span>平均每单件数</span><input type="number" min="0.01" step="0.01" value={target.averageUnitsPerOrder || ""} onChange={(event) => updateTarget("averageUnitsPerOrder", numericValue(event.target.value))} /><small>多件订单需填写；不确认时按 1 件假设</small></label>
+              </div>
+              <div className="ad-form-grid two">
+                <label className="ad-field"><span>观察期平均成交价 <em>可选</em></span><div className="ad-input-prefix"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={target.unitPrice ?? ""} onChange={(event) => updateTarget("unitPrice", optionalNumericValue(event.target.value))} /></div><small>按单件售价，用于销售额、ACOS 与 TACoS</small></label>
+                <label className="ad-field"><span>广告前单件利润 <em>可选</em></span><div className="ad-input-prefix"><b>{currency?.symbol ?? "¤"}</b><input type="number" step="0.01" value={target.preAdUnitProfit ?? ""} onChange={(event) => updateTarget("preAdUnitProfit", optionalNumericValue(event.target.value, false))} /></div><small>单件售价扣除 Coupon、佣金、FBA、退货、采购和头程，但尚未扣广告</small></label>
+              </div>
             </div>
           </section>
 
           <section className="ad-panel ad-result-panel" aria-live="polite">
-            <div className="ad-panel-heading">
+            <div className="ad-panel-heading ad-result-heading">
               <div><span>02</span><div><h2>竞品估算结果</h2><p>当前结果基于 {result.validSampleCount} 个有效校准样本</p></div></div>
-              <button className="icon-button" type="button" onClick={copyResult} title="复制测算结果" aria-label="复制测算结果">{copied ? <Check size={17} /> : <Clipboard size={17} />}</button>
+              <div className="ad-result-actions">
+                <button className="ad-secondary-button" type="button" onClick={copyResult} disabled={result.target.estimatedSpend === null}>{copied ? <Check size={16} /> : <Clipboard size={16} />}{copied ? "已复制" : "复制"}</button>
+                <button className="ad-secondary-button" type="button" onClick={exportCsv} disabled={result.target.estimatedSpend === null}><Download size={16} /> CSV</button>
+              </div>
             </div>
             <div className="ad-result-grid">
-              <ResultMetric label="观察期广告花费" value={formatMoney(result.target.estimatedSpend, site)} detail={`${target.observationDays || 0} 天 · Modeled_Estimate`} tone="accent" />
-              <ResultMetric label="估算实际 CPC" value={formatMoney(result.target.estimatedCpc, site)} detail="CPC 代理 × m" />
-              <ResultMetric label="日均广告花费" value={formatMoney(result.target.estimatedDailySpend, site)} detail="观察期花费 ÷ D" />
-              <ResultMetric label="广告归因单占比" value={formatPercent(result.target.adOrderShare)} detail="p̂ad · 不等于流量占比" tone="success" />
+              <ResultMetric label="观察期广告花费" value={formatMoney(result.target.estimatedSpend, site)} detail={`组合情景 P25–P75 ${formatInterval(result.target.intervals.estimatedSpend, (value) => formatMoney(value, site))}`} tone="accent" />
+              <ResultMetric label="估算实际 CPC" value={formatMoney(result.target.estimatedCpc, site)} detail={`情景 P25–P75 ${formatInterval(result.target.intervals.estimatedCpc, (value) => formatMoney(value, site))}`} />
+              <ResultMetric label="日均广告花费" value={formatMoney(result.target.estimatedDailySpend, site)} detail={`${target.observationDays || 0} 天 · 组合情景 P25–P75 ${formatInterval(result.target.intervals.estimatedDailySpend, (value) => formatMoney(value, site))}`} />
+              <ResultMetric label="广告归因单占比" value={formatPercent(result.target.adOrderShare)} detail={`情景 P25–P75 ${formatInterval(result.target.intervals.adOrderShare, (value) => formatPercent(value))}`} tone="success" />
             </div>
             <div className="ad-result-detail-grid">
               <div><span>估算广告点击</span><strong>{formatNumber(result.target.estimatedClicks, 1)}</strong></div>
@@ -343,6 +480,15 @@ function AdvertisingEstimator() {
               <div><span>估算广告归因订单</span><strong>{formatNumber(result.target.estimatedAdOrders, 1)}</strong></div>
               <div><span>非广告归因订单</span><strong>{formatNumber(result.target.estimatedNonAdOrders, 1)}</strong></div>
             </div>
+            <div className="ad-business-grid">
+              <div><span>估算 Ad CVR</span><strong>{formatPercent(result.target.estimatedAdCvr)}</strong></div>
+              <div><span>估算 ACOS</span><strong>{formatPercent(result.target.acos)}</strong></div>
+              <div><span>估算 TACoS</span><strong>{formatPercent(result.target.tacos)}</strong></div>
+              <div><span>Break-even ACOS</span><strong>{formatPercent(result.target.breakEvenAcos)}</strong></div>
+              <div><span>最大安全 CPC</span><strong>{formatMoney(result.target.maxSafeCpc, site)}</strong></div>
+              <div className={result.target.profitAfterAds !== null && result.target.profitAfterAds < 0 ? "danger" : ""}><span>估算广告后利润</span><strong>{formatMoney(result.target.profitAfterAds, site)}</strong></div>
+            </div>
+            {(result.quality.isExtrapolated || result.quality.hasObservationWindowMismatch || result.quality.hasConversionInconsistency) && <div className="ad-quality-alert"><AlertTriangle size={15} /><span>当前结果存在{[result.quality.isExtrapolated && "范围外推", result.quality.hasObservationWindowMismatch && "观察窗口不一致", result.quality.hasConversionInconsistency && "Ad CVR 超过 100% 的口径矛盾"].filter(Boolean).join("、")}，只能作为高风险情景，不能直接转成预算。</span></div>}
             <div className="ad-model-badge"><Info size={14} /><span>这是校准后的情景估算。非广告归因订单是总订单扣除可匹配广告归因订单的残余口径，不等于纯自然搜索订单，也不代表广告增量因果。</span></div>
           </section>
         </div>
@@ -354,28 +500,29 @@ function AdvertisingEstimator() {
           </div>
           <div className="ad-table-wrap">
             <table className="ad-sample-table">
-              <thead><tr><th>样本</th><th>广告得分 A</th><th>自然得分 O</th><th>真实广告点击 C</th><th>真实花费 S</th><th>CPC 代理 b</th><th>总订单 Q</th><th>广告归因订单</th><th>操作</th></tr></thead>
+              <thead><tr><th>样本</th><th>窗口天数</th><th>广告得分 A</th><th>自然得分 O</th><th>真实广告点击 C</th><th>真实花费 S</th><th>CPC 代理 b</th><th>总订单 Q</th><th>广告归因订单</th><th>操作</th></tr></thead>
               <tbody>
-                {samples.length === 0 ? <tr><td colSpan={9} className="ad-empty-row">暂无校准样本，请增加样本或载入文档示例。</td></tr> : samples.map((sample) => <tr key={sample.id}>
-                  <td><input className="ad-sample-name" value={sample.name} onChange={(event) => updateSample(sample.id, "name", event.target.value)} /></td>
-                  <td><input type="number" min="0" step="1" value={sample.adScore || ""} onChange={(event) => updateSample(sample.id, "adScore", numericValue(event.target.value))} /></td>
-                  <td><input type="number" min="0" step="1" value={sample.organicScore || ""} onChange={(event) => updateSample(sample.id, "organicScore", numericValue(event.target.value))} /></td>
-                  <td><input type="number" min="0" step="1" value={sample.adClicks || ""} onChange={(event) => updateSample(sample.id, "adClicks", numericValue(event.target.value))} /></td>
-                  <td><div className="ad-table-money"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.adSpend || ""} onChange={(event) => updateSample(sample.id, "adSpend", numericValue(event.target.value))} /></div></td>
-                  <td><div className="ad-table-money"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.cpcProxy || ""} onChange={(event) => updateSample(sample.id, "cpcProxy", numericValue(event.target.value))} /></div></td>
-                  <td><input type="number" min="0" step="1" value={sample.totalOrders || ""} onChange={(event) => updateSample(sample.id, "totalOrders", numericValue(event.target.value))} /></td>
-                  <td><input type="number" min="0" step="1" value={sample.adOrders || ""} onChange={(event) => updateSample(sample.id, "adOrders", numericValue(event.target.value))} /></td>
-                  <td><button className="icon-button" type="button" onClick={() => removeSample(sample.id)} title="删除样本" aria-label={`删除${sample.name}`}><Trash2 size={15} /></button></td>
+                {samples.length === 0 ? <tr><td colSpan={10} className="ad-empty-row">暂无校准样本，请增加样本或载入文档示例。</td></tr> : samples.map((sample) => <tr key={sample.id}>
+                  <td data-label="样本"><input className="ad-sample-name" value={sample.name} onChange={(event) => updateSample(sample.id, "name", event.target.value)} /></td>
+                  <td data-label="窗口天数"><input type="number" min="1" step="1" value={sample.observationDays || ""} onChange={(event) => updateSample(sample.id, "observationDays", numericValue(event.target.value))} /></td>
+                  <td data-label="广告得分 A"><input type="number" min="0" step="1" value={sample.adScore || ""} onChange={(event) => updateSample(sample.id, "adScore", numericValue(event.target.value))} /></td>
+                  <td data-label="自然得分 O"><input type="number" min="0" step="1" value={sample.organicScore || ""} onChange={(event) => updateSample(sample.id, "organicScore", numericValue(event.target.value))} /></td>
+                  <td data-label="真实广告点击 C"><input type="number" min="0" step="1" value={sample.adClicks || ""} onChange={(event) => updateSample(sample.id, "adClicks", numericValue(event.target.value))} /></td>
+                  <td data-label="真实花费 S"><div className="ad-table-money"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.adSpend || ""} onChange={(event) => updateSample(sample.id, "adSpend", numericValue(event.target.value))} /></div></td>
+                  <td data-label="CPC 代理 b"><div className="ad-table-money"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.cpcProxy || ""} onChange={(event) => updateSample(sample.id, "cpcProxy", numericValue(event.target.value))} /></div></td>
+                  <td data-label="总订单 Q"><input type="number" min="0" step="1" value={sample.totalOrders || ""} onChange={(event) => updateSample(sample.id, "totalOrders", numericValue(event.target.value))} /></td>
+                  <td data-label="广告归因订单"><input type="number" min="0" step="1" value={sample.adOrders ?? ""} onChange={(event) => updateSample(sample.id, "adOrders", optionalNumericValue(event.target.value))} placeholder="留空则不参与订单校准" /></td>
+                  <td data-label="操作"><button className="icon-button" type="button" onClick={() => removeSample(sample.id)} title="删除样本" aria-label={`删除${sample.name}`}><Trash2 size={15} /></button></td>
                 </tr>)}
               </tbody>
             </table>
           </div>
-          <div className="ad-sample-note"><Scale size={14} /><span>样本的 A/O 必须与竞品输入同站点、同类目、同生命周期和同窗口口径。真实 CPC = S ÷ C；订单倾向只使用 0 &lt; 广告归因订单占比 &lt; 1 的边界内样本。</span></div>
+          <div className="ad-sample-note"><Scale size={14} /><span>样本的 A/O 必须与竞品输入同站点、同类目、同生命周期和同窗口口径。真实 CPC = S ÷ C；0%/100% 广告订单样本使用 Jeffreys 平滑保留，避免直接丢弃真实边界数据。</span></div>
         </section>
 
         <div className="ad-bottom-grid">
           <section className="ad-panel ad-calibration-panel">
-            <div className="ad-panel-heading"><div><span>04</span><div><h2>校准系数</h2><p>中位数用于降低极端样本影响</p></div></div><BarChart3 size={18} /></div>
+            <div className="ad-panel-heading"><div><span>04</span><div><h2>校准系数</h2><p>中位数做点估算，P25–P75 做组合情景边界</p></div></div><BarChart3 size={18} /></div>
             <div className="ad-coefficient-list">
               <div><span>点击尺度 k</span><strong>{formatNumber(result.scales.clickScale, 4)}</strong><small>median(C ÷ A) · {result.observations.clickScale.length} 行</small></div>
               <div><span>CPC 尺度 m</span><strong>{formatNumber(result.scales.cpcScale, 4)}</strong><small>median((S ÷ C) ÷ b) · {result.observations.cpcScale.length} 行</small></div>
@@ -385,6 +532,7 @@ function AdvertisingEstimator() {
               <p><b>点击：</b> Ĉ* = k × A*</p>
               <p><b>花费：</b> ŜT = Ĉ* × ĉ*，日均 = ŜT ÷ D</p>
               <p><b>订单：</b> p̂ad = λA* ÷ (λA* + O*)</p>
+              <p><b>安全线：</b> Break-even ACOS = 广告前单件利润 ÷ 单件售价；最大安全 CPC = Ad CVR × 平均每单件数 × 广告前单件利润</p>
             </div>
           </section>
 
