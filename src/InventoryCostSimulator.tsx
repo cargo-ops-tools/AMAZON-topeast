@@ -23,7 +23,6 @@ import {
   type DecisionAction,
   type InventoryInput,
   type InventoryResult,
-  type InventorySizeTier,
 } from "./lib/inventory";
 import { numberInputValue } from "./lib/input";
 
@@ -46,18 +45,19 @@ function createDefaultInput(): InventoryInput {
     asin: "",
     productName: "",
     currentInventory: 0,
-    unitVolumeCuFt: 0,
+    packageLengthCm: 0,
+    packageWidthCm: 0,
+    packageHeightCm: 0,
+    actualWeightKg: 0,
     averageDailySales: 0,
     inboundDate: "",
     currentDate: localDateString(),
-    sizeTier: "standard",
     dangerousGoods: false,
     utilizationEligible: false,
     utilizationWeeks: 0,
     customStorageRate: null,
     customAgedRate: null,
     removalQuantity: 0,
-    unitWeightLb: 0,
     customRemovalFee: null,
     liquidationQuantity: 0,
     averageSellingPrice: 0,
@@ -102,6 +102,13 @@ function daysOfSupply(value: number): string {
   return Number.isFinite(value) ? `${Math.ceil(value)} 天` : "无销量";
 }
 
+function weightBasisLabel(profile: InventoryResult["packageClassification"]): string {
+  if (!profile.valid) return "待补齐包装参数";
+  if (profile.weightBasis === "dimensional") return "体积重较高，按体积重计费";
+  if (profile.weightBasis === "actual-only") return "该 Size Tier 按实际重量计费";
+  return "实际重量较高，按实重计费";
+}
+
 async function writeClipboard(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
@@ -121,6 +128,9 @@ async function writeClipboard(text: string): Promise<void> {
 function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
   const recoveryPending = "待补齐回收输入";
   const pnlPending = "待补齐 P&L 输入";
+  const packagePending = "待补齐包装参数";
+  const profile = result.packageClassification;
+  const removalReady = profile.valid || (input.customRemovalFee !== null && input.customRemovalFee > 0);
   return [
     { 分区: "基础信息", 项目: "SKU", 数值: input.sku },
     { 分区: "基础信息", 项目: "ASIN", 数值: input.asin },
@@ -128,6 +138,14 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
     { 分区: "基础信息", 项目: "当前库存", 数值: input.currentInventory },
     { 分区: "基础信息", 项目: "库存年龄（天）", 数值: result.inventoryAgeDays },
     { 分区: "基础信息", 项目: "库存可售天数", 数值: daysOfSupply(result.daysOfSupply) },
+    { 分区: "包装自动判定", 项目: "包装尺寸（cm）", 数值: profile.dimensionsValid ? `${number(input.packageLengthCm)} × ${number(input.packageWidthCm)} × ${number(input.packageHeightCm)}` : packagePending },
+    { 分区: "包装自动判定", 项目: "实际重量（kg）", 数值: profile.weightValid ? number(profile.actualWeightKg, 3) : packagePending },
+    { 分区: "包装自动判定", 项目: "实际重量（lb）", 数值: profile.weightValid ? number(profile.actualWeightLb, 3) : packagePending },
+    { 分区: "包装自动判定", 项目: "Amazon 计费体积（cu ft/件）", 数值: profile.dimensionsValid ? number(profile.unitVolumeCuFt, 4) : packagePending },
+    { 分区: "包装自动判定", 项目: "Dimensional Weight（lb）", 数值: profile.valid ? number(profile.dimensionalWeightLb, 3) : packagePending },
+    { 分区: "包装自动判定", 项目: "Size Tier", 数值: profile.valid ? profile.sizeTierName : packagePending },
+    { 分区: "包装自动判定", 项目: "Amazon Shipping Weight（lb）", 数值: profile.valid ? number(profile.shippingWeightLb, 1) : packagePending },
+    { 分区: "包装自动判定", 项目: "计费依据", 数值: weightBasisLabel(profile) },
     { 分区: "月仓储费", 项目: "库存总体积（cu ft）", 数值: number(result.totalVolume) },
     { 分区: "月仓储费", 项目: "基础仓储费（$）", 数值: money(result.monthlyBaseStorageFee) },
     { 分区: "月仓储费", 项目: "库容利用率附加费（$）", 数值: money(result.monthlyUtilizationSurcharge) },
@@ -135,13 +153,13 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
     { 分区: "老化库存", 项目: "费率档位", 数值: result.agedRates.ageBand },
     { 分区: "老化库存", 项目: "预计老化库存费用（$）", 数值: money(result.agedInventoryFee) },
     { 分区: "移除方案", 项目: "移除数量", 数值: Math.min(input.currentInventory, input.removalQuantity) },
-    { 分区: "移除方案", 项目: "单件移除费（$）", 数值: money(result.removalFeePerUnit) },
-    { 分区: "移除方案", 项目: "总移除费（$）", 数值: money(result.removalTotalFee) },
+    { 分区: "移除方案", 项目: "单件移除费（$）", 数值: removalReady ? money(result.removalFeePerUnit) : packagePending },
+    { 分区: "移除方案", 项目: "总移除费（$）", 数值: removalReady ? money(result.removalTotalFee) : packagePending },
     { 分区: "清货方案", 项目: "测算状态", 数值: result.liquidationConfigured ? "完整 P&L" : "待补齐输入" },
     { 分区: "清货方案", 项目: "清货数量（件）", 数值: result.liquidationQuantity },
     { 分区: "清货方案", 项目: "ASP（$/件）", 数值: input.averageSellingPrice > 0 ? money(input.averageSellingPrice) : recoveryPending },
     { 分区: "清货方案", 项目: "回收率", 数值: `${number(input.recoveryRate * 100, 1)}%` },
-    { 分区: "清货方案", 项目: "Amazon Shipping Weight（lb）", 数值: input.unitWeightLb > 0 ? number(input.unitWeightLb) : recoveryPending },
+    { 分区: "清货方案", 项目: "Amazon Shipping Weight（lb）", 数值: profile.valid ? number(profile.shippingWeightLb, 1) : recoveryPending },
     { 分区: "清货方案", 项目: "Processing fee（$/件）", 数值: result.liquidationRecoveryReady ? money(result.liquidationProcessingFeePerUnit) : recoveryPending },
     { 分区: "清货方案", 项目: "预计毛回收（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationGrossRecovery) : recoveryPending },
     { 分区: "清货方案", 项目: "Referral fee 15%（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationReferralFee) : recoveryPending },
@@ -193,10 +211,21 @@ function InventoryCostSimulator() {
   const [input, setInput] = useState<InventoryInput>(() => createDefaultInput());
   const [copied, setCopied] = useState(false);
   const result = useMemo(() => calculateInventoryCosts(input), [input]);
+  const packageProfile = result.packageClassification;
+  const removalConfigured = packageProfile.valid || (input.customRemovalFee !== null && input.customRemovalFee > 0);
   const maxForecastFee = Math.max(1, ...result.forecast.map((row) => row.totalFee));
+  const missingPackageFields = [
+    input.packageLengthCm > 0 ? "" : "包装长",
+    input.packageWidthCm > 0 ? "" : "包装宽",
+    input.packageHeightCm > 0 ? "" : "包装高",
+    input.actualWeightKg > 0 ? "" : "实际重量",
+  ].filter(Boolean);
+  const packageStatusText = packageProfile.valid
+    ? "包装参数已自动计算"
+    : `还差：${missingPackageFields.join("、")}`;
   const liquidationStatusText = result.liquidationQuantity <= 0
     ? "请先填写清货数量"
-    : "请补齐 ASP、采购成本、头程、单件体积与 Shipping Weight";
+    : "请补齐 ASP、采购成本、头程与包装参数";
 
   const update = (key: keyof InventoryInput, value: InventoryInput[keyof InventoryInput]) => {
     setInput((current) => ({ ...current, [key]: value } as InventoryInput));
@@ -209,14 +238,21 @@ function InventoryCostSimulator() {
       `ASIN：${input.asin || "未填写"}`,
       `当前库存：${input.currentInventory} 件`,
       `当前库龄：${result.inventoryAgeDays} 天`,
+      `包装尺寸：${packageProfile.dimensionsValid ? `${number(input.packageLengthCm)} × ${number(input.packageWidthCm)} × ${number(input.packageHeightCm)} cm` : "待补齐"}`,
+      `实际重量：${packageProfile.weightValid ? `${number(packageProfile.actualWeightKg, 3)} kg / ${number(packageProfile.actualWeightLb, 3)} lb` : "待补齐"}`,
+      `Amazon 计费体积：${packageProfile.dimensionsValid ? `${number(packageProfile.unitVolumeCuFt, 4)} cu ft / 件` : "待补齐"}`,
+      `Dimensional Weight：${packageProfile.valid ? `${number(packageProfile.dimensionalWeightLb, 3)} lb` : "待补齐"}`,
+      `Size Tier：${packageProfile.valid ? packageProfile.sizeTierName : "待补齐"}`,
+      `Shipping Weight：${packageProfile.valid ? `${number(packageProfile.shippingWeightLb, 1)} lb` : "待补齐"}`,
+      `计费依据：${weightBasisLabel(packageProfile)}`,
       `库存总体积：${number(result.totalVolume)} cu ft`,
       `预计月仓储费：$${money(result.monthlyStorageFee)}`,
       `预计老化库存费：$${money(result.agedInventoryFee)}`,
-      `移除方案：$${money(result.removalTotalFee)}`,
+      `移除方案：${removalConfigured ? `$${money(result.removalTotalFee)}` : "待补齐包装参数"}`,
       `清货数量：${result.liquidationQuantity} 件`,
       `ASP：${input.averageSellingPrice > 0 ? `$${money(input.averageSellingPrice)} / 件` : "待补齐回收输入"}`,
       `回收率：${number(input.recoveryRate * 100, 1)}%`,
-      `Shipping Weight：${input.unitWeightLb > 0 ? `${number(input.unitWeightLb)} lb` : "待补齐回收输入"}`,
+      `Shipping Weight：${packageProfile.valid ? `${number(packageProfile.shippingWeightLb, 1)} lb` : "待补齐回收输入"}`,
       `清货毛回收：${result.liquidationRecoveryReady ? signedMoney(result.liquidationGrossRecovery) : "待补齐回收输入"}`,
       `Referral fee（15%）：${result.liquidationRecoveryReady ? `−$${money(result.liquidationReferralFee)}` : "待补齐回收输入"}`,
       `Processing fee：${result.liquidationRecoveryReady ? `−$${money(result.liquidationProcessingFee)}（$${money(result.liquidationProcessingFeePerUnit)}/件）` : "待补齐回收输入"}`,
@@ -271,7 +307,6 @@ function InventoryCostSimulator() {
               <div className="section-label"><Gauge size={15} /> 库存与周转</div>
               <div className="inventory-form-grid">
                 <label className="field-label"><span>当前库存（件）</span><input type="number" min="0" step="1" value={numberInputValue(input.currentInventory)} onChange={(event) => update("currentInventory", integer(event.target.value))} /></label>
-                <label className="field-label"><span>单件体积（cu ft）</span><input type="number" min="0" step="0.001" value={numberInputValue(input.unitVolumeCuFt)} onChange={(event) => update("unitVolumeCuFt", numeric(event.target.value))} /></label>
                 <label className="field-label"><span>平均日销</span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageDailySales)} onChange={(event) => update("averageDailySales", numeric(event.target.value))} /></label>
                 <label className="field-label"><span>ASP / 平均售价（$/件）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageSellingPrice)} onChange={(event) => update("averageSellingPrice", numeric(event.target.value))} /></label>
                 <label className="field-label"><span>采购成本（$/件）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitCost)} onChange={(event) => update("unitCost", numeric(event.target.value))} /></label>
@@ -282,10 +317,25 @@ function InventoryCostSimulator() {
             </div>
 
             <div className="inventory-form-section">
-              <div className="section-label"><Scale size={15} /> Amazon 费用参数</div>
-              <div className="tier-segment" aria-label="尺寸等级">
-                <button className={input.sizeTier === "standard" ? "active" : ""} type="button" onClick={() => update("sizeTier", "standard" as InventorySizeTier)}>Standard-size</button>
-                <button className={input.sizeTier === "oversize" ? "active" : ""} type="button" onClick={() => update("sizeTier", "oversize" as InventorySizeTier)}>Oversize</button>
+              <div className="section-label"><Scale size={15} /> 单品包装与 Amazon 计费</div>
+              <div className="inventory-form-grid">
+                <label className="field-label"><span>包装长（cm）</span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageLengthCm)} onChange={(event) => update("packageLengthCm", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>包装宽（cm）</span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageWidthCm)} onChange={(event) => update("packageWidthCm", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>包装高（cm）</span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageHeightCm)} onChange={(event) => update("packageHeightCm", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>含包装实际重量（kg）</span><input type="number" min="0" step="0.001" value={numberInputValue(input.actualWeightKg)} onChange={(event) => update("actualWeightKg", numeric(event.target.value))} /></label>
+              </div>
+              <small className="inventory-field-hint">三边无需按大小排序；系统会自动计算体积、Size Tier、Dimensional Weight 与 Shipping Weight。</small>
+
+              <div className={`package-auto-panel ${packageProfile.valid ? "ready" : "pending"}`}>
+                <div className="package-auto-heading"><span>自动判定结果</span><b>{packageProfile.valid ? "已计算" : packageStatusText}</b></div>
+                <div className="package-auto-grid">
+                  <div><small>Amazon 计费体积</small><strong>{packageProfile.dimensionsValid ? `${number(packageProfile.unitVolumeCuFt, 4)} ft³/件` : "—"}</strong></div>
+                  <div><small>实际重量</small><strong>{packageProfile.weightValid ? `${number(packageProfile.actualWeightKg, 3)} kg / ${number(packageProfile.actualWeightLb, 2)} lb` : "—"}</strong></div>
+                  <div><small>Dimensional Weight</small><strong>{packageProfile.valid ? `${number(packageProfile.dimensionalWeightLb, 2)} lb` : "—"}</strong></div>
+                  <div><small>Amazon Size Tier</small><strong>{packageProfile.valid ? packageProfile.sizeTierName : "—"}</strong></div>
+                  <div className="shipping-weight-result"><small>Shipping Weight</small><strong>{packageProfile.valid ? `${number(packageProfile.shippingWeightLb, packageProfile.shippingWeightLb < 1 ? 1 : 0)} lb` : "—"}</strong></div>
+                  <div><small>计费依据</small><strong>{weightBasisLabel(packageProfile)}</strong></div>
+                </div>
               </div>
 
               <label className="inventory-check-row">
@@ -317,12 +367,10 @@ function InventoryCostSimulator() {
             <div className="inventory-form-section">
               <div className="section-label"><PackageMinus size={15} /> 退出方案参数</div>
               <div className="inventory-form-grid">
-                <label className="field-label"><span>Amazon Shipping Weight（lb）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitWeightLb)} onChange={(event) => update("unitWeightLb", numeric(event.target.value))} /></label>
                 <label className="field-label"><span>移除数量</span><input type="number" min="0" step="1" value={numberInputValue(input.removalQuantity)} onChange={(event) => update("removalQuantity", integer(event.target.value))} /></label>
                 <label className="field-label"><span>清货数量</span><input type="number" min="0" step="1" value={numberInputValue(input.liquidationQuantity)} onChange={(event) => update("liquidationQuantity", integer(event.target.value))} /></label>
                 <label className="field-label"><span>预计回收率（按 ASP）</span><div className="percent-input"><input type="number" min="0" max="15" step="0.1" value={numberInputValue(input.recoveryRate * 100)} onChange={(event) => update("recoveryRate", Math.min(0.15, numeric(event.target.value) / 100))} /><b>%</b></div></label>
               </div>
-              <small className="inventory-field-hint">Shipping Weight 请优先采用 Seller Central 计费重；仅填产品实重可能低估 Processing fee。</small>
               <div className="liquidation-rate-scenarios" aria-label="清货回收率情景">
                 <span>快速情景</span>
                 {[0.05, 0.075, 0.10].map((rate) => <button className={Math.abs(input.recoveryRate - rate) < 0.0001 ? "active" : ""} type="button" key={rate} onClick={() => update("recoveryRate", rate)}>{number(rate * 100, rate === 0.075 ? 1 : 0)}%</button>)}
@@ -377,12 +425,12 @@ function InventoryCostSimulator() {
               </div>
               <div className="inventory-metric-strip four">
                 <div><small>当前库存</small><strong>{input.currentInventory} 件</strong></div>
-                <div><small>单件体积</small><strong>{number(input.unitVolumeCuFt, 3)} cu ft</strong></div>
+                <div><small>单件体积（自动）</small><strong>{packageProfile.dimensionsValid ? `${number(packageProfile.unitVolumeCuFt, 4)} cu ft` : "—"}</strong></div>
                 <div><small>基础费率</small><strong>${money(result.storageRates.baseRate)} / cu ft</strong></div>
                 <div><small>库容附加费率</small><strong>${money(result.storageRates.utilizationRate)} / cu ft</strong></div>
               </div>
               <div className="inventory-invoice">
-                <div><span>库存总体积</span><b>{input.currentInventory} × {number(input.unitVolumeCuFt, 3)} = {number(result.totalVolume)} cu ft</b></div>
+                <div><span>库存总体积</span><b>{packageProfile.dimensionsValid ? `${input.currentInventory} × ${number(packageProfile.unitVolumeCuFt, 4)} = ${number(result.totalVolume)} cu ft` : "待补齐包装尺寸"}</b></div>
                 <div><span>基础月仓储费</span><b>${money(result.monthlyBaseStorageFee)}</b></div>
                 <div><span>Storage Utilization Surcharge</span><b>${money(result.monthlyUtilizationSurcharge)}</b></div>
                 <div className="total"><span>预计当月仓储费</span><b>${money(result.monthlyStorageFee)}</b></div>
@@ -400,7 +448,7 @@ function InventoryCostSimulator() {
                 <div><Warehouse size={20} /><span><small>老化库存数量</small><strong>{result.agedInventoryQuantity} 件</strong></span></div>
               </div>
               <div className="aged-comparison">
-                <div><small>体积口径</small><strong>${money(result.agedVolumeFee)}</strong><span>{result.agedInventoryQuantity} × {number(input.unitVolumeCuFt, 3)} × ${money(result.agedRates.volumeRate)}</span></div>
+                <div><small>体积口径</small><strong>${money(result.agedVolumeFee)}</strong><span>{packageProfile.dimensionsValid ? `${result.agedInventoryQuantity} × ${number(packageProfile.unitVolumeCuFt, 4)} × $${money(result.agedRates.volumeRate)}` : "待补齐包装尺寸"}</span></div>
                 <b>取较高值</b>
                 <div><small>最低每件口径</small><strong>${money(result.agedMinimumFee)}</strong><span>{result.agedInventoryQuantity} × ${money(result.agedRates.minimumPerUnit)}</span></div>
                 <div className="aged-selected"><small>预计老化库存费</small><strong>${money(result.agedInventoryFee)}</strong></div>
@@ -410,12 +458,13 @@ function InventoryCostSimulator() {
 
             <div className="exit-plan-grid">
               <article className="exit-plan removal-plan">
-                <div className="exit-plan-title"><PackageMinus size={20} /><div><h2>库存移除方案</h2><p>按尺寸等级与单件重量匹配 2026 移除费</p></div></div>
-                <div className="exit-plan-amount"><span>预计总移除费用</span><strong>${money(result.removalTotalFee)}</strong></div>
+                <div className="exit-plan-title"><PackageMinus size={20} /><div><h2>库存移除方案</h2><p>按自动判定的 Size Tier 与 Shipping Weight 匹配移除费</p></div></div>
+                <div className="exit-plan-amount"><span>预计总移除费用</span><strong>{removalConfigured ? `$${money(result.removalTotalFee)}` : "—"}</strong></div>
                 <dl>
                   <div><dt>计算数量</dt><dd>{Math.min(input.currentInventory, input.removalQuantity)} 件</dd></div>
-                  <div><dt>Shipping Weight</dt><dd>{number(input.unitWeightLb)} lb</dd></div>
-                  <div><dt>单件移除费</dt><dd>${money(result.removalFeePerUnit)}</dd></div>
+                  <div><dt>Size Tier</dt><dd>{packageProfile.valid ? packageProfile.sizeTierName : "—"}</dd></div>
+                  <div><dt>Shipping Weight</dt><dd>{packageProfile.valid ? `${number(packageProfile.shippingWeightLb, packageProfile.shippingWeightLb < 1 ? 1 : 0)} lb` : "—"}</dd></div>
+                  <div><dt>单件移除费</dt><dd>{removalConfigured ? `$${money(result.removalFeePerUnit)}` : "—"}</dd></div>
                   <div><dt>移除后货权</dt><dd>货物可退回或处置</dd></div>
                 </dl>
                 <a href={OFFICIAL_REMOVAL_RULE} target="_blank" rel="noreferrer">Amazon removal fee <ExternalLink size={12} /></a>
@@ -433,7 +482,7 @@ function InventoryCostSimulator() {
                   <div><dt>ASP × 回收率</dt><dd>{input.averageSellingPrice > 0 ? `$${money(input.averageSellingPrice)} × ${number(input.recoveryRate * 100, 1)}%` : "—"}</dd></div>
                   <div><dt>预计毛回收</dt><dd>{result.liquidationRecoveryReady ? signedMoney(result.liquidationGrossRecovery) : "—"}</dd></div>
                   <div><dt>15% Referral fee</dt><dd>{result.liquidationRecoveryReady ? `−$${money(result.liquidationReferralFee)}` : "—"}</dd></div>
-                  <div><dt>Processing fee</dt><dd>{result.liquidationRecoveryReady ? `−$${money(result.liquidationProcessingFee)}` : "—"} <small>{input.unitWeightLb > 0 ? `($${money(result.liquidationProcessingFeePerUnit)}/件)` : ""}</small></dd></div>
+                  <div><dt>Processing fee</dt><dd>{result.liquidationRecoveryReady ? `−$${money(result.liquidationProcessingFee)}` : "—"} <small>{packageProfile.valid ? `(${number(packageProfile.shippingWeightLb, packageProfile.shippingWeightLb < 1 ? 1 : 0)} lb · $${money(result.liquidationProcessingFeePerUnit)}/件)` : ""}</small></dd></div>
                   <div><dt>Amazon 费用合计</dt><dd>{result.liquidationRecoveryReady ? `−$${money(result.liquidationAmazonFees)}` : "—"}</dd></div>
                   <div className="net"><dt>预计净回收</dt><dd>{result.liquidationRecoveryReady ? signedMoney(result.liquidationNetRecovery) : "—"}</dd></div>
                   <div><dt>采购成本</dt><dd>{result.liquidationConfigured ? `−$${money(result.liquidationProductCost)}` : "—"}</dd></div>
@@ -453,7 +502,7 @@ function InventoryCostSimulator() {
               <div className="cost-summary-table">
                 <div><span>月仓储费</span><b>${money(result.monthlyStorageFee)}</b></div>
                 <div><span>老化库存费用</span><b>${money(result.agedInventoryFee)}</b></div>
-                <div><span>库存移除费用</span><b>${money(result.removalTotalFee)}</b></div>
+                <div><span>库存移除费用</span><b>{removalConfigured ? `$${money(result.removalTotalFee)}` : "—"}</b></div>
                 <div><span>批量清货损益</span><b>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</b></div>
               </div>
               <p className="inventory-rule-note neutral"><Info size={14} /> 移除与清货是互斥方案，不能相加。批清 P&amp;L 已包含所选数量的本月仓储分摊；决策应分别比较未来持有成本、移除费和清货损失。</p>
@@ -489,7 +538,7 @@ function InventoryCostSimulator() {
               <div><span>库存处理决策参考</span><h2>{result.decisionTitle}</h2><p>{result.decisionReason}</p></div>
               <div className="decision-comparison">
                 <div><small>未来持有成本</small><b>${money(result.projectedHoldingCost)}</b></div>
-                <div><small>移除费用</small><b>${money(result.removalTotalFee)}</b></div>
+                <div><small>移除费用</small><b>{removalConfigured ? `$${money(result.removalTotalFee)}` : "—"}</b></div>
                 <div><small>清货损益</small><b>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</b></div>
               </div>
             </article>

@@ -6,18 +6,19 @@ export interface InventoryInput {
   asin: string;
   productName: string;
   currentInventory: number;
-  unitVolumeCuFt: number;
+  packageLengthCm: number;
+  packageWidthCm: number;
+  packageHeightCm: number;
+  actualWeightKg: number;
   averageDailySales: number;
   inboundDate: string;
   currentDate: string;
-  sizeTier: InventorySizeTier;
   dangerousGoods: boolean;
   utilizationEligible: boolean;
   utilizationWeeks: number;
   customStorageRate: number | null;
   customAgedRate: number | null;
   removalQuantity: number;
-  unitWeightLb: number;
   customRemovalFee: number | null;
   liquidationQuantity: number;
   averageSellingPrice: number;
@@ -40,6 +41,26 @@ export interface AgedRateResult {
   minimumPerUnit: number;
 }
 
+export interface PackageClassification {
+  valid: boolean;
+  dimensionsValid: boolean;
+  weightValid: boolean;
+  sortedDimensionsCm: [number, number, number];
+  sortedDimensionsIn: [number, number, number];
+  unitVolumeCuFt: number;
+  actualWeightKg: number;
+  actualWeightLb: number;
+  dimensionalWeightLb: number;
+  decisionWeightLb: number;
+  rawShippingWeightLb: number;
+  shippingWeightLb: number;
+  lengthPlusGirthIn: number;
+  sizeTier: InventorySizeTier;
+  sizeTierName: string;
+  weightBasis: "pending" | "actual" | "dimensional" | "actual-only";
+  outOfRange: boolean;
+}
+
 export interface ForecastRow {
   month: string;
   openingInventory: number;
@@ -52,6 +73,7 @@ export interface ForecastRow {
 }
 
 export interface InventoryResult {
+  packageClassification: PackageClassification;
   inventoryAgeDays: number;
   daysOfSupply: number;
   totalVolume: number;
@@ -91,6 +113,129 @@ export interface InventoryResult {
 }
 
 const MS_PER_DAY = 86_400_000;
+const CM3_PER_CUBIC_FOOT = 28_316.846592;
+const CM_PER_INCH = 2.54;
+const LB_PER_KG = 2.20462262;
+
+interface SizeTierRule {
+  name: string;
+  weightCapLb: number;
+  maxLengthIn: number;
+  maxWidthIn: number;
+  maxHeightIn: number;
+  maxLengthPlusGirthIn: number;
+  category: InventorySizeTier;
+}
+
+const SIZE_TIER_RULES: readonly SizeTierRule[] = [
+  { name: "Small standard-size", weightCapLb: 1, maxLengthIn: 15, maxWidthIn: 12, maxHeightIn: 0.75, maxLengthPlusGirthIn: Number.POSITIVE_INFINITY, category: "standard" },
+  { name: "Large standard-size", weightCapLb: 20, maxLengthIn: 18, maxWidthIn: 14, maxHeightIn: 8, maxLengthPlusGirthIn: Number.POSITIVE_INFINITY, category: "standard" },
+  { name: "Small bulky", weightCapLb: 50, maxLengthIn: 37, maxWidthIn: 28, maxHeightIn: 20, maxLengthPlusGirthIn: 130, category: "oversize" },
+  { name: "Large bulky", weightCapLb: 50, maxLengthIn: 59, maxWidthIn: 33, maxHeightIn: 33, maxLengthPlusGirthIn: 130, category: "oversize" },
+  { name: "Extra-large 0 to 50 lb", weightCapLb: 50, maxLengthIn: Number.POSITIVE_INFINITY, maxWidthIn: Number.POSITIVE_INFINITY, maxHeightIn: Number.POSITIVE_INFINITY, maxLengthPlusGirthIn: 1650, category: "oversize" },
+  { name: "Extra-large 50+ to 70 lb", weightCapLb: 70, maxLengthIn: Number.POSITIVE_INFINITY, maxWidthIn: Number.POSITIVE_INFINITY, maxHeightIn: Number.POSITIVE_INFINITY, maxLengthPlusGirthIn: 1650, category: "oversize" },
+  { name: "Extra-large 70+ to 150 lb", weightCapLb: 150, maxLengthIn: Number.POSITIVE_INFINITY, maxWidthIn: Number.POSITIVE_INFINITY, maxHeightIn: Number.POSITIVE_INFINITY, maxLengthPlusGirthIn: 1650, category: "oversize" },
+  { name: "Extra-large 150+ lb", weightCapLb: 1500, maxLengthIn: Number.POSITIVE_INFINITY, maxWidthIn: Number.POSITIVE_INFINITY, maxHeightIn: Number.POSITIVE_INFINITY, maxLengthPlusGirthIn: 1650, category: "oversize" },
+];
+
+function ceilSafe(value: number): number {
+  return Math.ceil(Math.round(value * 1e9) / 1e9);
+}
+
+export function classifyInventoryPackage(
+  packageLengthCm: number,
+  packageWidthCm: number,
+  packageHeightCm: number,
+  actualWeightKg: number,
+): PackageClassification {
+  const sortedDimensionsCm = [packageLengthCm, packageWidthCm, packageHeightCm]
+    .map((value) => Math.max(0, Number.isFinite(value) ? value : 0))
+    .sort((left, right) => right - left) as [number, number, number];
+  const sortedDimensionsIn = sortedDimensionsCm.map((value) => value / CM_PER_INCH) as [number, number, number];
+  const [lengthIn, widthIn, heightIn] = sortedDimensionsIn;
+  const dimensionsValid = sortedDimensionsCm.every((value) => value > 0);
+  const normalizedWeightKg = Math.max(0, Number.isFinite(actualWeightKg) ? actualWeightKg : 0);
+  const weightValid = normalizedWeightKg > 0;
+  const valid = dimensionsValid && weightValid;
+  const unitVolumeCuFt = dimensionsValid
+    ? sortedDimensionsCm.reduce((product, value) => product * value, 1) / CM3_PER_CUBIC_FOOT
+    : 0;
+  const actualWeightLb = normalizedWeightKg * LB_PER_KG;
+  const rawDimensionalWeightLb = dimensionsValid ? (lengthIn * widthIn * heightIn) / 139 : 0;
+  const largeStandardCandidate = valid
+    && Math.max(actualWeightLb, rawDimensionalWeightLb) <= 20
+    && lengthIn <= 18
+    && widthIn <= 14
+    && heightIn <= 8;
+  const dimensionalWeightLb = dimensionsValid
+    ? largeStandardCandidate
+      ? rawDimensionalWeightLb
+      : (lengthIn * Math.max(widthIn, 2) * Math.max(heightIn, 2)) / 139
+    : 0;
+  const decisionWeightLb = valid ? Math.max(actualWeightLb, dimensionalWeightLb) : 0;
+  const lengthPlusGirthIn = dimensionsValid ? lengthIn + 2 * (widthIn + heightIn) : 0;
+
+  if (!valid) {
+    return {
+      valid,
+      dimensionsValid,
+      weightValid,
+      sortedDimensionsCm,
+      sortedDimensionsIn,
+      unitVolumeCuFt,
+      actualWeightKg: normalizedWeightKg,
+      actualWeightLb,
+      dimensionalWeightLb,
+      decisionWeightLb,
+      rawShippingWeightLb: 0,
+      shippingWeightLb: 0,
+      lengthPlusGirthIn,
+      sizeTier: "standard",
+      sizeTierName: "待计算",
+      weightBasis: "pending",
+      outOfRange: false,
+    };
+  }
+
+  const matchedRule = SIZE_TIER_RULES.find((rule) => (
+    decisionWeightLb <= rule.weightCapLb
+    && lengthIn <= rule.maxLengthIn
+    && widthIn <= rule.maxWidthIn
+    && heightIn <= rule.maxHeightIn
+    && lengthPlusGirthIn <= rule.maxLengthPlusGirthIn
+  ));
+  const rule = matchedRule ?? SIZE_TIER_RULES[SIZE_TIER_RULES.length - 1];
+  const usesActualOnly = rule.name === "Small standard-size" || rule.name === "Extra-large 150+ lb";
+  const rawShippingWeightLb = usesActualOnly ? actualWeightLb : decisionWeightLb;
+  const shippingWeightLb = rule.category === "standard" && rawShippingWeightLb < 1
+    ? ceilSafe(rawShippingWeightLb * 10) / 10
+    : ceilSafe(rawShippingWeightLb);
+  const weightBasis: PackageClassification["weightBasis"] = usesActualOnly
+    ? "actual-only"
+    : dimensionalWeightLb > actualWeightLb
+      ? "dimensional"
+      : "actual";
+
+  return {
+    valid,
+    dimensionsValid,
+    weightValid,
+    sortedDimensionsCm,
+    sortedDimensionsIn,
+    unitVolumeCuFt,
+    actualWeightKg: normalizedWeightKg,
+    actualWeightLb,
+    dimensionalWeightLb,
+    decisionWeightLb,
+    rawShippingWeightLb,
+    shippingWeightLb,
+    lengthPlusGirthIn,
+    sizeTier: rule.category,
+    sizeTierName: rule.name,
+    weightBasis,
+    outOfRange: matchedRule === undefined,
+  };
+}
 
 function roundCurrency(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -152,7 +297,8 @@ export function getAgedInventoryRate(ageDays: number, customRate: number | null 
 }
 
 export function calculateRemovalFeePerUnit(sizeTier: InventorySizeTier, unitWeightLb: number): number {
-  const weight = Math.max(0, unitWeightLb);
+  if (!Number.isFinite(unitWeightLb) || unitWeightLb <= 0) return 0;
+  const weight = unitWeightLb;
   if (sizeTier === "standard") {
     if (weight <= 0.5) return 0.84;
     if (weight <= 1) return 1.53;
@@ -188,7 +334,12 @@ function shiftMonth(dateString: string, offset: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
-function forecastHoldingCosts(input: InventoryInput, currentAgeDays: number): ForecastRow[] {
+function forecastHoldingCosts(
+  input: InventoryInput,
+  currentAgeDays: number,
+  sizeTier: InventorySizeTier,
+  unitVolumeCuFt: number,
+): ForecastRow[] {
   const rows: ForecastRow[] = [];
   let inventory = Math.max(0, Math.floor(input.currentInventory));
   const monthlySales = Math.max(0, input.averageDailySales) * 30;
@@ -200,10 +351,10 @@ function forecastHoldingCosts(input: InventoryInput, currentAgeDays: number): Fo
     const averageInventory = (openingInventory + closingInventory) / 2;
     const ageDays = currentAgeDays + index * 30 + 15;
     const monthDate = shiftMonth(input.currentDate, index);
-    const storageRates = getStorageRates(monthDate, input.sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, ageDays, input.customStorageRate);
-    const storageFee = averageInventory * input.unitVolumeCuFt * storageRates.totalRate;
+    const storageRates = getStorageRates(monthDate, sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, ageDays, input.customStorageRate);
+    const storageFee = averageInventory * unitVolumeCuFt * storageRates.totalRate;
     const agedRates = getAgedInventoryRate(ageDays, input.customAgedRate);
-    const agedVolumeFee = averageInventory * input.unitVolumeCuFt * agedRates.volumeRate;
+    const agedVolumeFee = averageInventory * unitVolumeCuFt * agedRates.volumeRate;
     const agedFee = Math.max(agedVolumeFee, averageInventory * agedRates.minimumPerUnit);
     rows.push({
       month: monthDate.slice(0, 7),
@@ -260,11 +411,19 @@ function chooseDecision(
 
 export function calculateInventoryCosts(input: InventoryInput): InventoryResult {
   const currentInventory = Math.max(0, Math.floor(input.currentInventory));
-  const unitVolume = Math.max(0, input.unitVolumeCuFt);
+  const packageClassification = classifyInventoryPackage(
+    input.packageLengthCm,
+    input.packageWidthCm,
+    input.packageHeightCm,
+    input.actualWeightKg,
+  );
+  const unitVolume = packageClassification.unitVolumeCuFt;
+  const sizeTier = packageClassification.sizeTier;
+  const shippingWeightLb = packageClassification.shippingWeightLb;
   const inventoryAgeDays = calculateInventoryAge(input.inboundDate, input.currentDate);
   const daysOfSupply = input.averageDailySales > 0 ? currentInventory / input.averageDailySales : Number.POSITIVE_INFINITY;
   const totalVolume = currentInventory * unitVolume;
-  const storageRates = getStorageRates(input.currentDate, input.sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, inventoryAgeDays, input.customStorageRate);
+  const storageRates = getStorageRates(input.currentDate, sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, inventoryAgeDays, input.customStorageRate);
   const monthlyBaseStorageFee = totalVolume * storageRates.baseRate;
   const monthlyUtilizationSurcharge = inventoryAgeDays > 30 ? totalVolume * storageRates.utilizationRate : 0;
   const monthlyStorageFee = monthlyBaseStorageFee + monthlyUtilizationSurcharge;
@@ -276,19 +435,19 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
   const agedInventoryFee = Math.max(agedVolumeFee, agedMinimumFee);
 
   const removalFeePerUnit = input.customRemovalFee === null
-    ? calculateRemovalFeePerUnit(input.sizeTier, input.unitWeightLb)
+    ? calculateRemovalFeePerUnit(sizeTier, shippingWeightLb)
     : Math.max(0, input.customRemovalFee);
   const removalQuantity = Math.min(currentInventory, Math.max(0, Math.floor(input.removalQuantity)));
   const removalTotalFee = removalQuantity * removalFeePerUnit;
 
   const liquidationQuantity = Math.min(currentInventory, Math.max(0, Math.floor(input.liquidationQuantity)));
-  const liquidationProcessingFeePerUnit = calculateLiquidationProcessingFee(input.sizeTier, input.unitWeightLb);
+  const liquidationProcessingFeePerUnit = calculateLiquidationProcessingFee(sizeTier, shippingWeightLb);
   const averageSellingPrice = Math.max(0, input.averageSellingPrice);
   const recoveryRate = Math.min(1, Math.max(0, input.recoveryRate));
   const liquidationRecoveryReady = liquidationQuantity > 0
     && averageSellingPrice > 0
     && recoveryRate > 0
-    && input.unitWeightLb > 0;
+    && packageClassification.valid;
   const liquidationConfigured = liquidationRecoveryReady
     && input.unitCost > 0
     && unitVolume > 0
@@ -314,7 +473,7 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     : 0;
   const liquidationLoss = liquidationConfigured ? Math.max(0, -liquidationPnl) : 0;
   const remainingInventoryValue = currentInventory * Math.max(0, input.unitCost);
-  const forecast = forecastHoldingCosts(input, inventoryAgeDays);
+  const forecast = forecastHoldingCosts(input, inventoryAgeDays, sizeTier, unitVolume);
   const projectedHoldingCost = forecast.reduce((sum, row) => sum + row.totalFee, 0);
   const decision = chooseDecision(
     inventoryAgeDays,
@@ -334,14 +493,15 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
   if (input.liquidationQuantity > currentInventory) warnings.push("清货数量超过当前库存，计算已按当前库存截断。");
   if (liquidationQuantity > 0 && averageSellingPrice <= 0) warnings.push("已填写清货数量，但 ASP 未填写，无法按售价测算毛回收。");
   if (liquidationQuantity > 0 && recoveryRate <= 0) warnings.push("清货回收率为 0；可使用 5%、7.5% 或 10% 情景进行测算。");
-  if (liquidationQuantity > 0 && input.unitWeightLb <= 0) warnings.push("Amazon Shipping Weight 未填写，无法确认 Liquidations processing fee。");
+  if ((removalQuantity > 0 || liquidationQuantity > 0) && !packageClassification.valid) warnings.push("包装长、宽、高或实际重量未补齐，无法自动判定 Size Tier 与 Shipping Weight。");
   if (liquidationQuantity > 0 && input.unitCost <= 0) warnings.push("采购成本未填写，完整批清 P&L 暂不生成。");
   if (liquidationQuantity > 0 && input.firstMileCostPerUnit === null) warnings.push("头程成本未填写；如确认无头程成本，请明确输入 0。");
-  if (liquidationQuantity > 0 && unitVolume <= 0) warnings.push("单件体积未填写，当月仓储费无法进入批清 P&L。");
+  if (packageClassification.outOfRange) warnings.push("包装或重量超出内置 Size Tier 范围，当前按 Extra-large 150+ lb 估算，请以 Seller Central 为准。");
   if (!input.dangerousGoods && input.utilizationEligible) warnings.push("Storage Utilization Surcharge 仅对符合 Amazon 资格且库龄超过 30 天的库存适用。");
   warnings.push("实际费用以 Amazon 记录的平均每日库存、库龄分布、尺寸重量与下单时费率为准。");
 
   return {
+    packageClassification,
     inventoryAgeDays,
     daysOfSupply,
     totalVolume,

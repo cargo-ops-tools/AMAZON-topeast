@@ -4,6 +4,7 @@ import {
   calculateInventoryCosts,
   calculateLiquidationProcessingFee,
   calculateRemovalFeePerUnit,
+  classifyInventoryPackage,
   getAgedInventoryRate,
   getStorageRates,
   type InventoryInput,
@@ -14,18 +15,19 @@ const input: InventoryInput = {
   asin: "B000000000",
   productName: "示例产品",
   currentInventory: 420,
-  unitVolumeCuFt: 0.12,
+  packageLengthCm: 35,
+  packageWidthCm: 24.5,
+  packageHeightCm: 7.5,
+  actualWeightKg: 0.6,
   averageDailySales: 2.5,
   inboundDate: "2025-06-15",
   currentDate: "2026-07-28",
-  sizeTier: "standard",
   dangerousGoods: false,
   utilizationEligible: false,
   utilizationWeeks: 18,
   customStorageRate: null,
   customAgedRate: null,
   removalQuantity: 420,
-  unitWeightLb: 1.2,
   customRemovalFee: null,
   liquidationQuantity: 420,
   averageSellingPrice: 20,
@@ -34,6 +36,56 @@ const input: InventoryInput = {
   recoveryRate: 0.08,
   forecastMonths: 12,
 };
+
+const smallStandardPackage = {
+  packageLengthCm: 10,
+  packageWidthCm: 10,
+  packageHeightCm: 1,
+  actualWeightKg: 0.09,
+};
+
+describe("package classification", () => {
+  it("derives volume, dimensional weight, tier and shipping weight from cm and kg", () => {
+    const result = classifyInventoryPackage(35, 24.5, 7.5, 0.6);
+    expect(result.valid).toBe(true);
+    expect(result.unitVolumeCuFt).toBeCloseTo(0.2271174504, 8);
+    expect(result.actualWeightLb).toBeCloseTo(1.322773572, 8);
+    expect(result.dimensionalWeightLb).toBeCloseTo(2.823445714, 8);
+    expect(result.sizeTierName).toBe("Large standard-size");
+    expect(result.sizeTier).toBe("standard");
+    expect(result.shippingWeightLb).toBe(3);
+    expect(result.weightBasis).toBe("dimensional");
+  });
+
+  it("sorts the three package dimensions before classification", () => {
+    const first = classifyInventoryPackage(35, 24.5, 7.5, 0.6);
+    const shuffled = classifyInventoryPackage(7.5, 35, 24.5, 0.6);
+    expect(shuffled.sortedDimensionsCm).toEqual([35, 24.5, 7.5]);
+    expect(shuffled).toEqual(first);
+  });
+
+  it("rounds sub-one-pound standard shipping weight up to 0.1 lb", () => {
+    const result = classifyInventoryPackage(10, 10, 1, 0.2);
+    expect(result.sizeTierName).toBe("Small standard-size");
+    expect(result.actualWeightLb).toBeCloseTo(0.440924524, 8);
+    expect(result.shippingWeightLb).toBe(0.5);
+    expect(result.weightBasis).toBe("actual-only");
+  });
+
+  it("classifies bulky packages and rounds shipping weight up to a whole pound", () => {
+    const result = classifyInventoryPackage(60, 40, 30, 1);
+    expect(result.sizeTierName).toBe("Small bulky");
+    expect(result.sizeTier).toBe("oversize");
+    expect(result.shippingWeightLb).toBe(32);
+  });
+
+  it("returns an invalid result when any package input is missing", () => {
+    const result = classifyInventoryPackage(35, 24.5, 0, 0.6);
+    expect(result.valid).toBe(false);
+    expect(result.shippingWeightLb).toBe(0);
+    expect(result.sizeTierName).toBe("待计算");
+  });
+});
 
 describe("inventory age and rate cards", () => {
   it("calculates inventory age using calendar dates", () => {
@@ -59,6 +111,7 @@ describe("inventory age and rate cards", () => {
 
 describe("removal and liquidation", () => {
   it("matches 2026 removal fee weight bands", () => {
+    expect(calculateRemovalFeePerUnit("standard", 0)).toBe(0);
     expect(calculateRemovalFeePerUnit("standard", 0.4)).toBe(0.84);
     expect(calculateRemovalFeePerUnit("standard", 1.2)).toBe(2.27);
     expect(calculateRemovalFeePerUnit("oversize", 12)).toBe(16.44);
@@ -77,7 +130,7 @@ describe("removal and liquidation", () => {
       liquidationQuantity: 1,
       averageSellingPrice: 20,
       recoveryRate: 0.075,
-      unitWeightLb: 0.2,
+      ...smallStandardPackage,
     });
     expect(result.liquidationGrossRecovery).toBeCloseTo(1.5, 6);
     expect(result.liquidationReferralFee).toBeCloseTo(0.23, 6);
@@ -92,7 +145,7 @@ describe("removal and liquidation", () => {
       liquidationQuantity: 1,
       averageSellingPrice: 1,
       recoveryRate: 0.05,
-      unitWeightLb: 0.2,
+      ...smallStandardPackage,
     });
     expect(result.liquidationNetRecovery).toBeCloseTo(-0.21, 6);
   });
@@ -101,17 +154,19 @@ describe("removal and liquidation", () => {
 describe("complete inventory scenario", () => {
   it("calculates storage, aged, removal and net liquidation economics", () => {
     const result = calculateInventoryCosts(input);
-    expect(result.totalVolume).toBeCloseTo(50.4, 6);
-    expect(result.monthlyStorageFee).toBeCloseTo(39.312, 6);
-    expect(result.agedInventoryFee).toBeCloseTo(347.76, 6);
-    expect(result.removalTotalFee).toBeCloseTo(953.4, 6);
+    expect(result.packageClassification.sizeTierName).toBe("Large standard-size");
+    expect(result.packageClassification.shippingWeightLb).toBe(3);
+    expect(result.totalVolume).toBeCloseTo(95.389329, 6);
+    expect(result.monthlyStorageFee).toBeCloseTo(74.403677, 6);
+    expect(result.agedInventoryFee).toBeCloseTo(658.186371, 6);
+    expect(result.removalTotalFee).toBeCloseTo(1659, 6);
     expect(result.liquidationGrossRecovery).toBeCloseTo(672, 6);
-    expect(result.liquidationNetRecovery).toBeCloseTo(424.2, 6);
+    expect(result.liquidationNetRecovery).toBeCloseTo(319.2, 6);
     expect(result.liquidationProductCost).toBeCloseTo(3360, 6);
     expect(result.liquidationFirstMileCost).toBeCloseTo(1050, 6);
-    expect(result.liquidationCurrentMonthStorageFee).toBeCloseTo(39.312, 6);
-    expect(result.liquidationPnl).toBeCloseTo(-4025.112, 6);
-    expect(result.liquidationLoss).toBeCloseTo(4025.112, 6);
+    expect(result.liquidationCurrentMonthStorageFee).toBeCloseTo(74.403677, 6);
+    expect(result.liquidationPnl).toBeCloseTo(-4165.203677, 6);
+    expect(result.liquidationLoss).toBeCloseTo(4165.203677, 6);
     expect(result.forecast.length).toBe(6);
   });
 
@@ -119,12 +174,12 @@ describe("complete inventory scenario", () => {
     const result = calculateInventoryCosts({
       ...input,
       removalQuantity: 0,
-      unitWeightLb: 0,
+      packageHeightCm: 0,
     });
     expect(result.liquidationConfigured).toBe(false);
     expect(result.liquidationPnl).toBe(0);
     expect(result.decision).not.toBe("liquidate");
-    expect(result.warnings).toContain("Amazon Shipping Weight 未填写，无法确认 Liquidations processing fee。");
+    expect(result.warnings).toContain("包装长、宽、高或实际重量未补齐，无法自动判定 Size Tier 与 Shipping Weight。");
   });
 
   it("distinguishes missing first-mile cost from an explicit zero", () => {
@@ -147,9 +202,9 @@ describe("complete inventory scenario", () => {
   });
 
   it("uses the minimum per-unit aged fee when it is higher than the volume fee", () => {
-    const result = calculateInventoryCosts({ ...input, unitVolumeCuFt: 0.01, inboundDate: "2025-01-01", currentDate: "2026-07-28" });
+    const result = calculateInventoryCosts({ ...input, ...smallStandardPackage, inboundDate: "2025-01-01", currentDate: "2026-07-28" });
     expect(result.agedRates.ageBand).toBe("456 天以上");
-    expect(result.agedVolumeFee).toBeCloseTo(33.18, 6);
+    expect(result.agedVolumeFee).toBeCloseTo(11.717406, 6);
     expect(result.agedMinimumFee).toBeCloseTo(147, 6);
     expect(result.agedInventoryFee).toBeCloseTo(147, 6);
   });
@@ -160,7 +215,7 @@ describe("complete inventory scenario", () => {
   });
 
   it("compares partial exit plans against the matching share of holding cost", () => {
-    const result = calculateInventoryCosts({ ...input, sizeTier: "oversize", removalQuantity: 1, liquidationQuantity: 1 });
+    const result = calculateInventoryCosts({ ...input, removalQuantity: 1, liquidationQuantity: 1, forecastMonths: 1 });
     expect(result.decision).toBe("promote");
   });
 });
