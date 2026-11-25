@@ -458,6 +458,18 @@ button { letter-spacing: 0; }
 .tier-segment { padding: 3px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; background: #edf0ee; border-radius: 5px; }
 .tier-segment button { min-height: 34px; padding: 7px; color: #68746e; background: transparent; border: 0; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer; }
 .tier-segment button.active { color: #fff; background: #315a46; }
+.storage-season-panel { padding: 10px; background: #f7f9f7; border: 1px solid #e1e6e2; border-radius: 5px; }
+.storage-season-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.storage-season-heading span { color: #35453d; font-size: 9px; font-weight: 800; }
+.storage-season-heading small { color: #7b8780; font-size: 7px; text-align: right; }
+.storage-season-segment { margin-top: 8px; }
+.storage-season-segment button { min-height: 43px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.storage-season-segment button b, .storage-season-segment button small { display: block; }
+.storage-season-segment button b { font-size: 10px; }
+.storage-season-segment button small { color: #87928c; font-size: 7px; font-weight: 600; }
+.storage-season-segment button.active small { color: #dbe9e1; }
+.storage-season-panel p { margin: 8px 0 0; color: #506159; font-size: 8px; line-height: 1.45; }
+.storage-season-forecast-note { display: block; margin-top: 4px; color: #7b8780; font-size: 7px; line-height: 1.45; }
 .inventory-check-row { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
 .inventory-check-row input { width: 16px; height: 16px; margin: 1px 0 0; flex: 0 0 auto; accent-color: #397656; }
 .inventory-check-row span, .inventory-check-row b, .inventory-check-row small { display: block; }
@@ -569,6 +581,7 @@ button { letter-spacing: 0; }
 .forecast-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 9px; }
 .forecast-table th { padding: 10px 11px; color: #69756e; background: #f2f5f3; border-bottom: 1px solid #dce2de; font-size: 8px; text-align: left; white-space: nowrap; }
 .forecast-table td { padding: 10px 11px; color: #435049; border-bottom: 1px solid #e5e9e6; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.forecast-season { display: block; margin-top: 2px; color: #7f8a84; font-size: 7px; }
 .forecast-table tbody tr:last-child td { border-bottom: 0; }
 .forecast-table tbody tr:hover { background: #fbfcfb; }
 .forecast-bar { width: 86px; height: 7px; overflow: hidden; background: #e6ebe7; border-radius: 2px; }

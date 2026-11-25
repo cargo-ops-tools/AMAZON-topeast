@@ -20,14 +20,14 @@ import {
 } from "lucide-react";
 import {
   calculateInventoryCosts,
-  type DecisionAction,
+  getStorageSeasonFromDate,
   type InventoryInput,
   type InventoryResult,
 } from "./lib/inventory";
 import { numberInputValue } from "./lib/input";
 
 const OFFICIAL_STORAGE_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/G3EDYEF6KUCFQTNM";
-const OFFICIAL_2026_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/G201411300";
+const OFFICIAL_AGED_INVENTORY_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/GJQNPA23YWVA4SBD?locale=en-US";
 const OFFICIAL_REMOVAL_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/GZ5Q2VW5WF4JWRGC";
 const OFFICIAL_LIQUIDATION_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/GYVCG5Q3BEJ6MLMF";
 
@@ -40,6 +40,7 @@ function localDateString(): string {
 }
 
 function createDefaultInput(): InventoryInput {
+  const currentDate = localDateString();
   return {
     sku: "",
     asin: "",
@@ -51,12 +52,13 @@ function createDefaultInput(): InventoryInput {
     actualWeightKg: 0,
     averageDailySales: 0,
     inboundDate: "",
-    currentDate: localDateString(),
+    currentDate,
     dangerousGoods: false,
     utilizationEligible: false,
     utilizationWeeks: 0,
-    customStorageRate: null,
+    storageSeason: getStorageSeasonFromDate(currentDate),
     customAgedRate: null,
+    agedSurchargeEarlyTierExempt: false,
     removalQuantity: 0,
     customRemovalFee: null,
     liquidationQuantity: 0,
@@ -67,13 +69,6 @@ function createDefaultInput(): InventoryInput {
     forecastMonths: 0,
   };
 }
-
-const DECISION_LABELS: Record<DecisionAction, string> = {
-  continue: "继续销售",
-  promote: "降价促销",
-  remove: "移除库存",
-  liquidate: "批量清货",
-};
 
 function numeric(value: string): number {
   const parsed = Number(value);
@@ -94,6 +89,12 @@ function signedMoney(value: number): string {
   return `${sign}$${money(Math.abs(value))}`;
 }
 
+function outflowMoney(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  const cost = Math.max(0, value);
+  return cost > 0 ? `−$${money(cost)}` : "$0.00";
+}
+
 function number(value: number, digits = 2): string {
   return Number.isFinite(value) ? value.toFixed(digits) : "0.00";
 }
@@ -107,6 +108,10 @@ function weightBasisLabel(profile: InventoryResult["packageClassification"]): st
   if (profile.weightBasis === "dimensional") return "体积重较高，按体积重计费";
   if (profile.weightBasis === "actual-only") return "该 Size Tier 按实际重量计费";
   return "实际重量较高，按实重计费";
+}
+
+function storageSeasonLabel(season: InventoryResult["storageRates"]["season"]): string {
+  return season === "peak" ? "旺季（10–12 月）" : "淡季（1–9 月）";
 }
 
 async function writeClipboard(text: string): Promise<void> {
@@ -136,7 +141,7 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
     { 分区: "基础信息", 项目: "ASIN", 数值: input.asin },
     { 分区: "基础信息", 项目: "产品名称", 数值: input.productName },
     { 分区: "基础信息", 项目: "当前库存", 数值: input.currentInventory },
-    { 分区: "基础信息", 项目: "库存年龄（天）", 数值: result.inventoryAgeDays },
+    { 分区: "基础信息", 项目: "库存年龄（天）", 数值: result.inventoryAgeReady ? result.inventoryAgeDays : "待填写入仓日期" },
     { 分区: "基础信息", 项目: "库存可售天数", 数值: daysOfSupply(result.daysOfSupply) },
     { 分区: "包装自动判定", 项目: "包装尺寸（cm）", 数值: profile.dimensionsValid ? `${number(input.packageLengthCm)} × ${number(input.packageWidthCm)} × ${number(input.packageHeightCm)}` : packagePending },
     { 分区: "包装自动判定", 项目: "实际重量（kg）", 数值: profile.weightValid ? number(profile.actualWeightKg, 3) : packagePending },
@@ -146,15 +151,18 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
     { 分区: "包装自动判定", 项目: "Size Tier", 数值: profile.valid ? profile.sizeTierName : packagePending },
     { 分区: "包装自动判定", 项目: "Amazon Shipping Weight（lb）", 数值: profile.valid ? number(profile.shippingWeightLb, 1) : packagePending },
     { 分区: "包装自动判定", 项目: "计费依据", 数值: weightBasisLabel(profile) },
+    { 分区: "月仓储费", 项目: "Amazon 仓储季节", 数值: storageSeasonLabel(result.storageRates.season) },
+    { 分区: "月仓储费", 项目: "基础费率（$/cu ft）", 数值: money(result.storageRates.baseRate) },
     { 分区: "月仓储费", 项目: "库存总体积（cu ft）", 数值: number(result.totalVolume) },
     { 分区: "月仓储费", 项目: "基础仓储费（$）", 数值: money(result.monthlyBaseStorageFee) },
     { 分区: "月仓储费", 项目: "库容利用率附加费（$）", 数值: money(result.monthlyUtilizationSurcharge) },
     { 分区: "月仓储费", 项目: "预计月仓储费（$）", 数值: money(result.monthlyStorageFee) },
-    { 分区: "老化库存", 项目: "费率档位", 数值: result.agedRates.ageBand },
-    { 分区: "老化库存", 项目: "预计老化库存费用（$）", 数值: money(result.agedInventoryFee) },
+    { 分区: "老化库存", 项目: "181–270 天豁免类目", 数值: input.agedSurchargeEarlyTierExempt ? "是（服饰/鞋/箱包/珠宝/手表）" : "否" },
+    { 分区: "老化库存", 项目: "费率档位", 数值: result.agedCalculationReady ? result.agedRates.ageBand : "待填写入仓日期" },
+    { 分区: "老化库存", 项目: "预计老化库存费用（$）", 数值: result.agedCalculationReady ? money(result.agedInventoryFee) : "待计算" },
     { 分区: "移除方案", 项目: "移除数量", 数值: Math.min(input.currentInventory, input.removalQuantity) },
     { 分区: "移除方案", 项目: "单件移除费（$）", 数值: removalReady ? money(result.removalFeePerUnit) : packagePending },
-    { 分区: "移除方案", 项目: "总移除费（$）", 数值: removalReady ? money(result.removalTotalFee) : packagePending },
+    { 分区: "移除方案", 项目: "总移除费用现金流（$）", 数值: removalReady ? money(-result.removalTotalFee) : packagePending },
     { 分区: "清货方案", 项目: "测算状态", 数值: result.liquidationConfigured ? "完整 P&L" : "待补齐输入" },
     { 分区: "清货方案", 项目: "清货数量（件）", 数值: result.liquidationQuantity },
     { 分区: "清货方案", 项目: "ASP（$/件）", 数值: input.averageSellingPrice > 0 ? money(input.averageSellingPrice) : recoveryPending },
@@ -186,13 +194,14 @@ async function exportInventoryWorkbook(input: InventoryInput, result: InventoryR
   const summarySheet = XLSX.utils.json_to_sheet(buildSummaryRows(input, result));
   const forecastSheet = XLSX.utils.json_to_sheet(result.forecast.map((row) => ({
     月份: row.month,
+    仓储季节: storageSeasonLabel(row.storageSeason),
     月初库存: number(row.openingInventory),
     月末库存: number(row.closingInventory),
     平均库存: number(row.averageInventory),
-    预计库龄天数: row.ageDays,
+    预计库龄天数: row.ageKnown ? row.ageDays : "待填写入仓日期",
     仓储费: money(row.storageFee),
-    老化库存费: money(row.agedFee),
-    月度合计: money(row.totalFee),
+    老化库存费: row.ageKnown ? money(row.agedFee) : "待计算",
+    月度合计: row.ageKnown ? money(row.totalFee) : "待计算",
   })));
   XLSX.utils.book_append_sheet(workbook, summarySheet, "成本汇总");
   XLSX.utils.book_append_sheet(workbook, forecastSheet, "月度推演");
@@ -237,7 +246,7 @@ function InventoryCostSimulator() {
       `SKU：${input.sku || "未填写"}`,
       `ASIN：${input.asin || "未填写"}`,
       `当前库存：${input.currentInventory} 件`,
-      `当前库龄：${result.inventoryAgeDays} 天`,
+      `当前库龄：${result.inventoryAgeReady ? `${result.inventoryAgeDays} 天` : "待填写入仓日期"}`,
       `包装尺寸：${packageProfile.dimensionsValid ? `${number(input.packageLengthCm)} × ${number(input.packageWidthCm)} × ${number(input.packageHeightCm)} cm` : "待补齐"}`,
       `实际重量：${packageProfile.weightValid ? `${number(packageProfile.actualWeightKg, 3)} kg / ${number(packageProfile.actualWeightLb, 3)} lb` : "待补齐"}`,
       `Amazon 计费体积：${packageProfile.dimensionsValid ? `${number(packageProfile.unitVolumeCuFt, 4)} cu ft / 件` : "待补齐"}`,
@@ -245,10 +254,13 @@ function InventoryCostSimulator() {
       `Size Tier：${packageProfile.valid ? packageProfile.sizeTierName : "待补齐"}`,
       `Shipping Weight：${packageProfile.valid ? `${number(packageProfile.shippingWeightLb, 1)} lb` : "待补齐"}`,
       `计费依据：${weightBasisLabel(packageProfile)}`,
+      `Amazon 仓储季节：${storageSeasonLabel(result.storageRates.season)}`,
+      `月仓储基础费率：$${money(result.storageRates.baseRate)} / cu ft`,
       `库存总体积：${number(result.totalVolume)} cu ft`,
       `预计月仓储费：$${money(result.monthlyStorageFee)}`,
-      `预计老化库存费：$${money(result.agedInventoryFee)}`,
-      `移除方案：${removalConfigured ? `$${money(result.removalTotalFee)}` : "待补齐包装参数"}`,
+      `181–270 天豁免类目：${input.agedSurchargeEarlyTierExempt ? "是（服饰/鞋/箱包/珠宝/手表）" : "否"}`,
+      `预计老化库存费：${result.agedCalculationReady ? `$${money(result.agedInventoryFee)}` : "待填写入仓日期"}`,
+      `移除方案现金流：${removalConfigured ? outflowMoney(result.removalTotalFee) : "待补齐包装参数"}`,
       `清货数量：${result.liquidationQuantity} 件`,
       `ASP：${input.averageSellingPrice > 0 ? `$${money(input.averageSellingPrice)} / 件` : "待补齐回收输入"}`,
       `回收率：${number(input.recoveryRate * 100, 1)}%`,
@@ -261,7 +273,7 @@ function InventoryCostSimulator() {
       `头程成本：${result.liquidationConfigured ? `−$${money(result.liquidationFirstMileCost)}` : "待补齐 P&L 输入"}`,
       `当月仓储分摊：${result.liquidationConfigured ? `−$${money(result.liquidationCurrentMonthStorageFee)}` : "待补齐 P&L 输入"}`,
       `批清 P&L：${result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "待补齐输入"}`,
-      `未来持有成本：$${money(result.projectedHoldingCost)}`,
+      `未来持有成本：${result.projectedHoldingCostReady ? `$${money(result.projectedHoldingCost)}` : "待填写有效入仓日期"}`,
       `建议动作：${result.decisionTitle}`,
       `判断依据：${result.decisionReason}`,
     ].join("\n");
@@ -348,17 +360,25 @@ function InventoryCostSimulator() {
               </label>
               {input.utilizationEligible && <label className="field-label"><span>历史库容利用率（周）</span><input type="number" min="0" step="0.1" value={numberInputValue(input.utilizationWeeks)} onChange={(event) => update("utilizationWeeks", numeric(event.target.value))} /></label>}
 
-              <div className="custom-rate-row">
-                <label className="inventory-check-row compact">
-                  <input type="checkbox" checked={input.customStorageRate !== null} onChange={(event) => update("customStorageRate", event.target.checked ? result.storageRates.baseRate : null)} />
-                  <span><b>手动月仓储费率</b><small>关闭时按月份自动匹配</small></span>
-                </label>
-                {input.customStorageRate !== null && <label className="rate-input"><span>$ / cu ft</span><input type="number" min="0" step="0.01" value={numberInputValue(input.customStorageRate)} onChange={(event) => update("customStorageRate", numeric(event.target.value))} /></label>}
+              <div className="storage-season-panel">
+                <div className="storage-season-heading"><span>Amazon 月仓储季节</span><small>直接选择，系统按 Size Tier 自动匹配费率</small></div>
+                <div className="tier-segment storage-season-segment" role="group" aria-label="Amazon 月仓储季节">
+                  <button type="button" className={input.storageSeason === "offPeak" ? "active" : ""} aria-pressed={input.storageSeason === "offPeak"} onClick={() => update("storageSeason", "offPeak")}><b>淡季</b><small>1–9 月</small></button>
+                  <button type="button" className={input.storageSeason === "peak" ? "active" : ""} aria-pressed={input.storageSeason === "peak"} onClick={() => update("storageSeason", "peak")}><b>旺季</b><small>10–12 月</small></button>
+                </div>
+                <p>{packageProfile.valid
+                  ? `当前：${storageSeasonLabel(result.storageRates.season)} · ${input.dangerousGoods ? "危险品" : "普通商品"} · ${packageProfile.sizeTierName} · $${money(result.storageRates.baseRate)}/cu ft`
+                  : `已选${input.storageSeason === "peak" ? "旺季" : "淡季"}；补齐包装尺寸与重量后自动匹配 Standard-size / Oversize 费率。`}</p>
+                <small className="storage-season-forecast-note">当前月和推演首月按所选季节；后续月份按日历自动跨季。</small>
               </div>
+              <label className="inventory-check-row">
+                <input type="checkbox" checked={input.agedSurchargeEarlyTierExempt} onChange={(event) => update("agedSurchargeEarlyTierExempt", event.target.checked)} />
+                <span><b>服饰 / 鞋 / 箱包 / 珠宝 / 手表</b><small>181–270 天老化库存附加费豁免；271 天起正常计费</small></span>
+              </label>
               <div className="custom-rate-row">
                 <label className="inventory-check-row compact">
                   <input type="checkbox" checked={input.customAgedRate !== null} onChange={(event) => update("customAgedRate", event.target.checked ? result.agedRates.volumeRate : null)} />
-                  <span><b>手动老化库存费率</b><small>用于账单复核或新费率覆盖</small></span>
+                  <span><b>手动老化库存体积费率</b><small>只覆盖 $/cu ft；366 天以上最低每件费仍保留</small></span>
                 </label>
                 {input.customAgedRate !== null && <label className="rate-input"><span>$ / cu ft</span><input type="number" min="0" step="0.01" value={numberInputValue(input.customAgedRate)} onChange={(event) => update("customAgedRate", numeric(event.target.value))} /></label>}
               </div>
@@ -391,17 +411,17 @@ function InventoryCostSimulator() {
             <div className={`inventory-result-hero decision-${result.decision}`}>
               <div>
                 <span className="result-kicker">未来持有成本推演</span>
-                <div className="inventory-cost-total"><sup>$</sup>{money(result.projectedHoldingCost)}</div>
-                <p>按当前日销推演 {result.forecast.length} 个月，库存售罄后停止计费</p>
+                <div className="inventory-cost-total">{result.projectedHoldingCostReady ? <><sup>$</sup>{money(result.projectedHoldingCost)}</> : "待计算"}</div>
+                <p>{result.projectedHoldingCostReady ? `按当前日销推演 ${result.forecast.length} 个月，库存售罄后停止计费` : "请先填写有效入仓日期；当前仅列出可确定的月仓储费明细"}</p>
                 <div className="fee-meta">
-                  <span>库龄 {result.inventoryAgeDays} 天</span>
+                  <span>库龄 {result.inventoryAgeReady ? `${result.inventoryAgeDays} 天` : "待填写"}</span>
                   <span>可售 {daysOfSupply(result.daysOfSupply)}</span>
-                  <span>{result.storageRates.season === "peak" ? "10–12 月旺季" : "1–9 月非旺季"}</span>
+                  <span>{storageSeasonLabel(result.storageRates.season)}</span>
                 </div>
               </div>
               <div className="decision-hero-block">
                 <small>系统建议</small>
-                <strong>{DECISION_LABELS[result.decision]}</strong>
+                <strong>{result.decisionTitle}</strong>
                 <p>{result.decisionReason}</p>
               </div>
               <div className="inventory-hero-actions">
@@ -414,7 +434,7 @@ function InventoryCostSimulator() {
             <div className="inventory-summary-grid">
               <div><span>库存总体积</span><strong>{number(result.totalVolume)}<small> cu ft</small></strong></div>
               <div><span>预计月仓储费</span><strong>${money(result.monthlyStorageFee)}</strong></div>
-              <div><span>当前老化库存费</span><strong className={result.agedInventoryFee > 0 ? "warning-text" : "success-text"}>${money(result.agedInventoryFee)}</strong></div>
+              <div><span>当前老化库存费</span><strong className={result.agedCalculationReady && result.agedInventoryFee > 0 ? "warning-text" : "success-text"}>{result.agedCalculationReady ? `$${money(result.agedInventoryFee)}` : "—"}</strong></div>
               <div><span>当前库存货值</span><strong>${money(result.remainingInventoryValue)}</strong></div>
             </div>
 
@@ -440,26 +460,29 @@ function InventoryCostSimulator() {
             <article className="inventory-section">
               <div className="inventory-section-heading">
                 <div><span>02</span><div><h2>长期仓储费 / 老化库存</h2><p>按当前库龄匹配费率，体积费与最低每件费取较高值</p></div></div>
-                <a href={OFFICIAL_2026_RULE} target="_blank" rel="noreferrer">2026 费率 <ExternalLink size={12} /></a>
+                <a href={OFFICIAL_AGED_INVENTORY_RULE} target="_blank" rel="noreferrer">2026 费率 <ExternalLink size={12} /></a>
               </div>
               <div className="aged-status-row">
-                <div><Clock3 size={20} /><span><small>当前库龄</small><strong>{result.inventoryAgeDays} 天</strong></span></div>
-                <div><CalendarDays size={20} /><span><small>计费档位</small><strong>{result.agedRates.ageBand}</strong></span></div>
-                <div><Warehouse size={20} /><span><small>老化库存数量</small><strong>{result.agedInventoryQuantity} 件</strong></span></div>
+                <div><Clock3 size={20} /><span><small>当前库龄</small><strong>{result.inventoryAgeReady ? `${result.inventoryAgeDays} 天` : "待填写入仓日期"}</strong></span></div>
+                <div><CalendarDays size={20} /><span><small>计费档位</small><strong>{result.agedCalculationReady ? result.agedRates.ageBand : "待计算"}</strong></span></div>
+                <div><Warehouse size={20} /><span><small>老化库存数量</small><strong>{result.agedCalculationReady ? `${result.agedInventoryQuantity} 件` : "—"}</strong></span></div>
               </div>
               <div className="aged-comparison">
-                <div><small>体积口径</small><strong>${money(result.agedVolumeFee)}</strong><span>{packageProfile.dimensionsValid ? `${result.agedInventoryQuantity} × ${number(packageProfile.unitVolumeCuFt, 4)} × $${money(result.agedRates.volumeRate)}` : "待补齐包装尺寸"}</span></div>
+                <div><small>体积口径</small><strong>{result.agedCalculationReady ? `$${money(result.agedVolumeFee)}` : "—"}</strong><span>{result.agedCalculationReady ? packageProfile.dimensionsValid ? `${result.agedInventoryQuantity} × ${number(packageProfile.unitVolumeCuFt, 4)} × $${money(result.agedRates.volumeRate)}` : "待补齐包装尺寸" : "待填写入仓日期"}</span></div>
                 <b>取较高值</b>
-                <div><small>最低每件口径</small><strong>${money(result.agedMinimumFee)}</strong><span>{result.agedInventoryQuantity} × ${money(result.agedRates.minimumPerUnit)}</span></div>
-                <div className="aged-selected"><small>预计老化库存费</small><strong>${money(result.agedInventoryFee)}</strong></div>
+                <div><small>最低每件口径</small><strong>{result.agedCalculationReady ? `$${money(result.agedMinimumFee)}` : "—"}</strong><span>{result.agedCalculationReady ? `${result.agedInventoryQuantity} × $${money(result.agedRates.minimumPerUnit)}` : "待填写入仓日期"}</span></div>
+                <div className="aged-selected"><small>预计老化库存费</small><strong>{result.agedCalculationReady ? `$${money(result.agedInventoryFee)}` : "—"}</strong></div>
               </div>
-              {input.customAgedRate === null && result.inventoryAgeDays >= 181 && result.inventoryAgeDays <= 365 && <p className="inventory-rule-note"><Info size={14} /> 181–365 天档位已内置；费率变化时可在左侧启用“手动老化库存费率”覆盖。</p>}
+              {!result.agedCalculationReady && <p className="inventory-rule-note"><Info size={14} /> 请填写入仓日期；缺少日期时不把库存默认当作 0 天，也不推演老化库存费。</p>}
+              {result.inventoryAgeReady && input.agedSurchargeEarlyTierExempt && result.inventoryAgeDays >= 181 && result.inventoryAgeDays <= 270 && <p className="inventory-rule-note"><Info size={14} /> 当前属于 181–270 天豁免档，服饰、鞋、箱包、珠宝和手表不收该档老化库存附加费。</p>}
+              {input.customAgedRate === null && result.inventoryAgeReady && result.inventoryAgeDays >= 181 && result.inventoryAgeDays <= 365 && <p className="inventory-rule-note"><Info size={14} /> 181–365 天档位已内置；费率变化时可在左侧启用“手动老化库存体积费率”覆盖。</p>}
+              <p className="inventory-rule-note neutral"><Info size={14} /> 当前按单一入仓日期估算；Amazon 实际按每月 15 日快照与 FIFO 库龄分布计费。</p>
             </article>
 
             <div className="exit-plan-grid">
               <article className="exit-plan removal-plan">
                 <div className="exit-plan-title"><PackageMinus size={20} /><div><h2>库存移除方案</h2><p>按自动判定的 Size Tier 与 Shipping Weight 匹配移除费</p></div></div>
-                <div className="exit-plan-amount"><span>预计总移除费用</span><strong>{removalConfigured ? `$${money(result.removalTotalFee)}` : "—"}</strong></div>
+                <div className="exit-plan-amount"><span>预计总移除费用</span><strong>{removalConfigured ? outflowMoney(result.removalTotalFee) : "—"}</strong><small>{removalConfigured ? "负号表示预计现金流出" : "补齐包装参数后自动测算"}</small></div>
                 <dl>
                   <div><dt>计算数量</dt><dd>{Math.min(input.currentInventory, input.removalQuantity)} 件</dd></div>
                   <div><dt>Size Tier</dt><dd>{packageProfile.valid ? packageProfile.sizeTierName : "—"}</dd></div>
@@ -501,8 +524,8 @@ function InventoryCostSimulator() {
               </div>
               <div className="cost-summary-table">
                 <div><span>月仓储费</span><b>${money(result.monthlyStorageFee)}</b></div>
-                <div><span>老化库存费用</span><b>${money(result.agedInventoryFee)}</b></div>
-                <div><span>库存移除费用</span><b>{removalConfigured ? `$${money(result.removalTotalFee)}` : "—"}</b></div>
+                <div><span>老化库存费用</span><b>{result.agedCalculationReady ? `$${money(result.agedInventoryFee)}` : "—"}</b></div>
+                <div><span>库存移除费用</span><b>{removalConfigured ? outflowMoney(result.removalTotalFee) : "—"}</b></div>
                 <div><span>批量清货损益</span><b>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</b></div>
               </div>
               <p className="inventory-rule-note neutral"><Info size={14} /> 移除与清货是互斥方案，不能相加。批清 P&amp;L 已包含所选数量的本月仓储分摊；决策应分别比较未来持有成本、移除费和清货损失。</p>
@@ -510,22 +533,22 @@ function InventoryCostSimulator() {
 
             <article className="inventory-section forecast-section">
               <div className="inventory-section-heading">
-                <div><span>04</span><div><h2>未来月度成本推演</h2><p>按日销递减库存，并自动跨越旺季和库龄费率节点</p></div></div>
-                <strong>合计 ${money(result.projectedHoldingCost)}</strong>
+                <div><span>04</span><div><h2>未来月度成本推演</h2><p>首月按所选季节，后续按月份自动跨季并匹配库龄费率</p></div></div>
+                <strong>{result.projectedHoldingCostReady ? `合计 $${money(result.projectedHoldingCost)}` : "合计待计算"}</strong>
               </div>
               <div className="forecast-table-wrap">
                 <table className="forecast-table">
                   <thead><tr><th>月份</th><th>月初库存</th><th>月末库存</th><th>预计库龄</th><th>仓储费</th><th>老化费</th><th>月度合计</th><th>成本趋势</th></tr></thead>
                   <tbody>
                     {result.forecast.map((row) => <tr key={row.month}>
-                      <td><b>{row.month}</b></td>
+                      <td><b>{row.month}</b><small className="forecast-season">{row.storageSeason === "peak" ? "旺季" : "淡季"}</small></td>
                       <td>{number(row.openingInventory)} 件</td>
                       <td>{number(row.closingInventory)} 件</td>
-                      <td>{row.ageDays} 天</td>
+                      <td>{row.ageKnown ? `${row.ageDays} 天` : "—"}</td>
                       <td>${money(row.storageFee)}</td>
-                      <td>${money(row.agedFee)}</td>
-                      <td><b>${money(row.totalFee)}</b></td>
-                      <td><div className="forecast-bar"><i style={{ width: `${Math.max(2, (row.totalFee / maxForecastFee) * 100)}%` }} /></div></td>
+                      <td>{row.ageKnown ? `$${money(row.agedFee)}` : "—"}</td>
+                      <td><b>{row.ageKnown ? `$${money(row.totalFee)}` : "—"}</b></td>
+                      <td>{row.ageKnown ? <div className="forecast-bar"><i style={{ width: `${Math.max(2, (row.totalFee / maxForecastFee) * 100)}%` }} /></div> : "—"}</td>
                     </tr>)}
                   </tbody>
                 </table>
@@ -537,8 +560,8 @@ function InventoryCostSimulator() {
               <Sparkles size={24} />
               <div><span>库存处理决策参考</span><h2>{result.decisionTitle}</h2><p>{result.decisionReason}</p></div>
               <div className="decision-comparison">
-                <div><small>未来持有成本</small><b>${money(result.projectedHoldingCost)}</b></div>
-                <div><small>移除费用</small><b>{removalConfigured ? `$${money(result.removalTotalFee)}` : "—"}</b></div>
+                <div><small>未来持有成本</small><b>{result.projectedHoldingCostReady ? `$${money(result.projectedHoldingCost)}` : "—"}</b></div>
+                <div><small>移除费用</small><b>{removalConfigured ? outflowMoney(result.removalTotalFee) : "—"}</b></div>
                 <div><small>清货损益</small><b>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</b></div>
               </div>
             </article>
@@ -550,7 +573,7 @@ function InventoryCostSimulator() {
             <footer className="source-footer inventory-source-footer">
               <span>规则来源 · Amazon US 2026</span>
               <a href={OFFICIAL_STORAGE_RULE} target="_blank" rel="noreferrer">Monthly storage fees <ExternalLink size={12} /></a>
-              <a href={OFFICIAL_2026_RULE} target="_blank" rel="noreferrer">Aged inventory surcharge <ExternalLink size={12} /></a>
+              <a href={OFFICIAL_AGED_INVENTORY_RULE} target="_blank" rel="noreferrer">Aged inventory surcharge <ExternalLink size={12} /></a>
               <a href={OFFICIAL_REMOVAL_RULE} target="_blank" rel="noreferrer">Removal & liquidation <ExternalLink size={12} /></a>
               <a href={OFFICIAL_LIQUIDATION_RULE} target="_blank" rel="noreferrer">FBA Liquidations P&amp;L <ExternalLink size={12} /></a>
             </footer>

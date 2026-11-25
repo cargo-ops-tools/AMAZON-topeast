@@ -1,4 +1,5 @@
 export type InventorySizeTier = "standard" | "oversize";
+export type InventoryStorageSeason = "offPeak" | "peak";
 export type DecisionAction = "continue" | "promote" | "remove" | "liquidate";
 
 export interface InventoryInput {
@@ -16,8 +17,9 @@ export interface InventoryInput {
   dangerousGoods: boolean;
   utilizationEligible: boolean;
   utilizationWeeks: number;
-  customStorageRate: number | null;
+  storageSeason: InventoryStorageSeason;
   customAgedRate: number | null;
+  agedSurchargeEarlyTierExempt: boolean;
   removalQuantity: number;
   customRemovalFee: number | null;
   liquidationQuantity: number;
@@ -63,6 +65,8 @@ export interface PackageClassification {
 
 export interface ForecastRow {
   month: string;
+  storageSeason: InventoryStorageSeason;
+  ageKnown: boolean;
   openingInventory: number;
   closingInventory: number;
   averageInventory: number;
@@ -74,6 +78,8 @@ export interface ForecastRow {
 
 export interface InventoryResult {
   packageClassification: PackageClassification;
+  inventoryAgeReady: boolean;
+  agedCalculationReady: boolean;
   inventoryAgeDays: number;
   daysOfSupply: number;
   totalVolume: number;
@@ -105,6 +111,7 @@ export interface InventoryResult {
   liquidationLoss: number;
   remainingInventoryValue: number;
   forecast: ForecastRow[];
+  projectedHoldingCostReady: boolean;
   projectedHoldingCost: number;
   decision: DecisionAction;
   decisionTitle: string;
@@ -254,6 +261,11 @@ export function calculateInventoryAge(inboundDate: string, currentDate: string):
   return Math.floor((current.getTime() - inbound.getTime()) / MS_PER_DAY);
 }
 
+export function getStorageSeasonFromDate(currentDate: string): InventoryStorageSeason {
+  const date = parseDate(currentDate) ?? new Date();
+  return date.getUTCMonth() + 1 >= 10 ? "peak" : "offPeak";
+}
+
 export function getStorageRates(
   currentDate: string,
   sizeTier: InventorySizeTier,
@@ -261,15 +273,13 @@ export function getStorageRates(
   utilizationEligible: boolean,
   utilizationWeeks: number,
   inventoryAgeDays: number,
-  customStorageRate: number | null = null,
+  selectedSeason: InventoryStorageSeason | null = null,
 ): StorageRateResult {
-  const date = parseDate(currentDate) ?? new Date();
-  const month = date.getUTCMonth() + 1;
-  const season = month >= 10 ? "peak" : "offPeak";
+  const season = selectedSeason ?? getStorageSeasonFromDate(currentDate);
   const baseRates = dangerousGoods
     ? season === "peak" ? { standard: 3.63, oversize: 2.43 } : { standard: 0.99, oversize: 0.78 }
     : season === "peak" ? { standard: 2.40, oversize: 1.40 } : { standard: 0.78, oversize: 0.56 };
-  const baseRate = customStorageRate === null ? baseRates[sizeTier] : Math.max(0, customStorageRate);
+  const baseRate = baseRates[sizeTier];
 
   let utilizationRate = 0;
   if (!dangerousGoods && utilizationEligible && inventoryAgeDays > 30) {
@@ -283,17 +293,33 @@ export function getStorageRates(
   return { baseRate, utilizationRate, totalRate: baseRate + utilizationRate, season };
 }
 
-export function getAgedInventoryRate(ageDays: number, customRate: number | null = null): AgedRateResult {
-  if (customRate !== null) return { ageBand: "手动费率", volumeRate: Math.max(0, customRate), minimumPerUnit: 0 };
-  if (ageDays < 181) return { ageBand: "0–180 天", volumeRate: 0, minimumPerUnit: 0 };
-  if (ageDays <= 210) return { ageBand: "181–210 天", volumeRate: 0.50, minimumPerUnit: 0 };
-  if (ageDays <= 240) return { ageBand: "211–240 天", volumeRate: 1.00, minimumPerUnit: 0 };
-  if (ageDays <= 270) return { ageBand: "241–270 天", volumeRate: 1.50, minimumPerUnit: 0 };
-  if (ageDays <= 300) return { ageBand: "271–300 天", volumeRate: 5.45, minimumPerUnit: 0 };
-  if (ageDays <= 330) return { ageBand: "301–330 天", volumeRate: 5.70, minimumPerUnit: 0 };
-  if (ageDays <= 365) return { ageBand: "331–365 天", volumeRate: 5.90, minimumPerUnit: 0 };
-  if (ageDays <= 455) return { ageBand: "366–455 天", volumeRate: 6.90, minimumPerUnit: 0.30 };
-  return { ageBand: "456 天以上", volumeRate: 7.90, minimumPerUnit: 0.35 };
+export function getAgedInventoryRate(
+  ageDays: number,
+  customRate: number | null = null,
+  earlyTierExempt = false,
+): AgedRateResult {
+  let officialRate: AgedRateResult;
+  if (ageDays < 181) officialRate = { ageBand: "0–180 天", volumeRate: 0, minimumPerUnit: 0 };
+  else if (ageDays <= 210) officialRate = { ageBand: "181–210 天", volumeRate: 0.50, minimumPerUnit: 0 };
+  else if (ageDays <= 240) officialRate = { ageBand: "211–240 天", volumeRate: 1.00, minimumPerUnit: 0 };
+  else if (ageDays <= 270) officialRate = { ageBand: "241–270 天", volumeRate: 1.50, minimumPerUnit: 0 };
+  else if (ageDays <= 300) officialRate = { ageBand: "271–300 天", volumeRate: 5.45, minimumPerUnit: 0 };
+  else if (ageDays <= 330) officialRate = { ageBand: "301–330 天", volumeRate: 5.70, minimumPerUnit: 0 };
+  else if (ageDays <= 365) officialRate = { ageBand: "331–365 天", volumeRate: 5.90, minimumPerUnit: 0 };
+  else if (ageDays <= 455) officialRate = { ageBand: "366–455 天", volumeRate: 6.90, minimumPerUnit: 0.30 };
+  else officialRate = { ageBand: "456 天以上", volumeRate: 7.90, minimumPerUnit: 0.35 };
+
+  if (earlyTierExempt && ageDays >= 181 && ageDays <= 270) {
+    return { ageBand: `${officialRate.ageBand}（豁免类目）`, volumeRate: 0, minimumPerUnit: 0 };
+  }
+  if (customRate !== null) {
+    return {
+      ageBand: `${officialRate.ageBand} · 手动体积费率`,
+      volumeRate: Math.max(0, customRate),
+      minimumPerUnit: officialRate.minimumPerUnit,
+    };
+  }
+  return officialRate;
 }
 
 export function calculateRemovalFeePerUnit(sizeTier: InventorySizeTier, unitWeightLb: number): number {
@@ -337,6 +363,7 @@ function shiftMonth(dateString: string, offset: number): string {
 function forecastHoldingCosts(
   input: InventoryInput,
   currentAgeDays: number,
+  inventoryAgeReady: boolean,
   sizeTier: InventorySizeTier,
   unitVolumeCuFt: number,
 ): ForecastRow[] {
@@ -351,13 +378,19 @@ function forecastHoldingCosts(
     const averageInventory = (openingInventory + closingInventory) / 2;
     const ageDays = currentAgeDays + index * 30 + 15;
     const monthDate = shiftMonth(input.currentDate, index);
-    const storageRates = getStorageRates(monthDate, sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, ageDays, input.customStorageRate);
+    const selectedSeason = index === 0 ? input.storageSeason : null;
+    const storageAgeDays = inventoryAgeReady ? ageDays : 0;
+    const storageRates = getStorageRates(monthDate, sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, storageAgeDays, selectedSeason);
     const storageFee = averageInventory * unitVolumeCuFt * storageRates.totalRate;
-    const agedRates = getAgedInventoryRate(ageDays, input.customAgedRate);
+    const agedRates = getAgedInventoryRate(ageDays, input.customAgedRate, input.agedSurchargeEarlyTierExempt);
     const agedVolumeFee = averageInventory * unitVolumeCuFt * agedRates.volumeRate;
-    const agedFee = Math.max(agedVolumeFee, averageInventory * agedRates.minimumPerUnit);
+    const agedFee = inventoryAgeReady && ageDays >= 181
+      ? Math.max(agedVolumeFee, averageInventory * agedRates.minimumPerUnit)
+      : 0;
     rows.push({
       month: monthDate.slice(0, 7),
+      storageSeason: storageRates.season,
+      ageKnown: inventoryAgeReady,
       openingInventory,
       closingInventory,
       averageInventory,
@@ -372,6 +405,8 @@ function forecastHoldingCosts(
 }
 
 function chooseDecision(
+  projectedHoldingCostReady: boolean,
+  inventoryAgeReady: boolean,
   inventoryAgeDays: number,
   daysOfSupply: number,
   projectedHoldingCost: number,
@@ -383,7 +418,14 @@ function chooseDecision(
   liquidationQuantity: number,
   liquidationConfigured: boolean,
 ): { decision: DecisionAction; decisionTitle: string; decisionReason: string } {
-  if (averageDailySales > 0 && daysOfSupply <= 90 && inventoryAgeDays < 181) {
+  if (currentInventory > 0 && !projectedHoldingCostReady) {
+    return {
+      decision: "promote",
+      decisionTitle: "补齐入仓日期后评估",
+      decisionReason: "缺少有效入仓日期，未来老化库存费无法计算，暂不比较持有、移除与清货方案。",
+    };
+  }
+  if (inventoryAgeReady && averageDailySales > 0 && daysOfSupply <= 90 && inventoryAgeDays < 181) {
     return { decision: "continue", decisionTitle: "继续销售", decisionReason: `预计 ${Math.ceil(daysOfSupply)} 天可售完，且尚未进入 181 天库龄附加费区间。` };
   }
   const holdingCostPerUnit = currentInventory > 0 ? projectedHoldingCost / currentInventory : 0;
@@ -420,16 +462,27 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
   const unitVolume = packageClassification.unitVolumeCuFt;
   const sizeTier = packageClassification.sizeTier;
   const shippingWeightLb = packageClassification.shippingWeightLb;
+  const parsedInboundDate = parseDate(input.inboundDate);
+  const parsedCurrentDate = parseDate(input.currentDate);
+  const inventoryDatesReversed = parsedInboundDate !== null
+    && parsedCurrentDate !== null
+    && parsedCurrentDate < parsedInboundDate;
+  const inventoryAgeReady = parsedInboundDate !== null
+    && parsedCurrentDate !== null
+    && !inventoryDatesReversed;
+  const agedCalculationReady = inventoryAgeReady;
   const inventoryAgeDays = calculateInventoryAge(input.inboundDate, input.currentDate);
   const daysOfSupply = input.averageDailySales > 0 ? currentInventory / input.averageDailySales : Number.POSITIVE_INFINITY;
   const totalVolume = currentInventory * unitVolume;
-  const storageRates = getStorageRates(input.currentDate, sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, inventoryAgeDays, input.customStorageRate);
+  const storageRates = getStorageRates(input.currentDate, sizeTier, input.dangerousGoods, input.utilizationEligible, input.utilizationWeeks, inventoryAgeDays, input.storageSeason);
   const monthlyBaseStorageFee = totalVolume * storageRates.baseRate;
   const monthlyUtilizationSurcharge = inventoryAgeDays > 30 ? totalVolume * storageRates.utilizationRate : 0;
   const monthlyStorageFee = monthlyBaseStorageFee + monthlyUtilizationSurcharge;
 
-  const agedRates = getAgedInventoryRate(inventoryAgeDays, input.customAgedRate);
-  const agedInventoryQuantity = inventoryAgeDays >= 181 || input.customAgedRate !== null ? currentInventory : 0;
+  const agedRates = getAgedInventoryRate(inventoryAgeDays, input.customAgedRate, input.agedSurchargeEarlyTierExempt);
+  const agedInventoryQuantity = agedCalculationReady && inventoryAgeDays >= 181
+    ? currentInventory
+    : 0;
   const agedVolumeFee = agedInventoryQuantity * unitVolume * agedRates.volumeRate;
   const agedMinimumFee = agedInventoryQuantity * agedRates.minimumPerUnit;
   const agedInventoryFee = Math.max(agedVolumeFee, agedMinimumFee);
@@ -473,9 +526,12 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     : 0;
   const liquidationLoss = liquidationConfigured ? Math.max(0, -liquidationPnl) : 0;
   const remainingInventoryValue = currentInventory * Math.max(0, input.unitCost);
-  const forecast = forecastHoldingCosts(input, inventoryAgeDays, sizeTier, unitVolume);
+  const forecast = forecastHoldingCosts(input, inventoryAgeDays, inventoryAgeReady, sizeTier, unitVolume);
+  const projectedHoldingCostReady = currentInventory === 0 || inventoryAgeReady;
   const projectedHoldingCost = forecast.reduce((sum, row) => sum + row.totalFee, 0);
   const decision = chooseDecision(
+    projectedHoldingCostReady,
+    inventoryAgeReady,
     inventoryAgeDays,
     daysOfSupply,
     projectedHoldingCost,
@@ -488,7 +544,8 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     liquidationConfigured,
   );
   const warnings: string[] = [];
-  if (input.currentDate < input.inboundDate) warnings.push("当前日期早于入仓日期，库龄按 0 天处理。");
+  if (inventoryDatesReversed) warnings.push("当前日期早于入仓日期，请检查日期；库龄与老化库存费暂不计算。");
+  if (currentInventory > 0 && !inventoryAgeReady && !inventoryDatesReversed) warnings.push("入仓日期未填写，老化库存费与库龄推演暂不计算。");
   if (input.removalQuantity > currentInventory) warnings.push("移除数量超过当前库存，计算已按当前库存截断。");
   if (input.liquidationQuantity > currentInventory) warnings.push("清货数量超过当前库存，计算已按当前库存截断。");
   if (liquidationQuantity > 0 && averageSellingPrice <= 0) warnings.push("已填写清货数量，但 ASP 未填写，无法按售价测算毛回收。");
@@ -502,6 +559,8 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
 
   return {
     packageClassification,
+    inventoryAgeReady,
+    agedCalculationReady,
     inventoryAgeDays,
     daysOfSupply,
     totalVolume,
@@ -533,6 +592,7 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     liquidationLoss,
     remainingInventoryValue,
     forecast,
+    projectedHoldingCostReady,
     projectedHoldingCost,
     ...decision,
     warnings,
