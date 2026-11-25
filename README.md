@@ -4,20 +4,16 @@
 
 ## 已完成
 
-- 板块一：FBA 基础测算引擎（Module 1–5）
-- 板块二：FBA 发货装箱助手
-- 板块三：FBA 库存成本推演
-- 板块四：亚马逊利润测算器（运营版）
-- 板块五：头程费用计算与利润联动
-- 板块六：链接经营评分（六维 100 分、S/A/B/C 链接规划 + Review/Rating 情景推演）
-- 板块七：货物申报金额（40HQ 装箱排布与单件申报金额）
+- FBA 利润测算（2026 US Size Tier、配送费、仓储费、入库配置费、头程与单件利润一体化）
+- FBA 库存成本推演
+- 亚马逊利润测算器（运营版）
+- 链接经营评分（六维 100 分、S/A/B/C 链接规划 + Review/Rating 情景推演）
+- 货物申报金额（40HQ 装箱排布与单件申报金额）
 - 单位标准化、2026 Size Tier、Shipping Weight、体积重诊断
 - 2026 普通商品、服装、危险品的非旺季/旺季配送费
-- 2026 年 4 月 17 日起 3.5% fuel and logistics-related surcharge
-- 包装尺寸降档模拟
-- 平均装箱、指定每箱数量、重量与尺寸联合限制
-- 多 SKU 独立计算、Amazon Shipment 数据生成
-- Excel/CSV 导入导出与建议发货数量
+- 可调整的 fuel and logistics-related surcharge（默认 3.5%）
+- 手动指定三个方向装箱数量、外箱重量/余量与 Amazon 箱规校验
+- 默认普船、普船、快船、美西空运、快递及两个 AGL 渠道的头程与利润率对比
 - 2026 月仓储费、Storage Utilization Surcharge 与危险品费率
 - 老化库存附加费、最低每件费、移除费与批量清货净回收
 - 最多 24 个月库存递减推演和继续销售/促销/移除/清货建议
@@ -29,9 +25,16 @@
 - 保守/正常/激进三种利润情景模拟和 SKU 运营评级
 - 利润驾驶舱、结果复制、Excel/CSV 导出与打印
 - 40HQ 六方向整齐装箱比较、箱装产品数量与申报金额计算
-- 板块九：广告分时分析数据源中心（官方报表下载路径、上传文件/文件夹、CSV/XLSX/XLS/JSON 字段识别）
+- 广告分时分析数据源中心（官方报表下载路径、上传文件/文件夹、CSV/XLSX/XLS/JSON 字段识别）
 - 广告报表按日级与小时级分层，明确 Marketing Stream 是真正小时分析数据源
-- 板块十：广告测算（竞品广告花费/CPC/订单占比区间、ACOS/TACoS、利润安全线与模型质量）
+- 广告测算（竞品广告花费/CPC/订单占比区间、ACOS/TACoS、利润安全线与模型质量）
+
+## FBA 利润测算假设与限制
+
+- 参考并组件化合并自 [rughouse-fba-tools/fba-calculator](https://github.com/rughouse-fba-tools/fba-calculator/tree/f9f2d1bc6cb9f19214e5f0fda021d0eee01ec3ed)，固定来源版本为 `f9f2d1bc6cb9f19214e5f0fda021d0eee01ec3ed`。
+- 费率口径为 Amazon US 2026，Size Tier、FBA 配送费、仓储费、入库配置费和头程渠道费率均为前端固定规则；实际费用以 Seller Central 账单和物流商报价为准。
+- Coupon 按售价比例折减后再计算佣金；退货按整单利润的期望损失简化折减，未拆分退款佣金、退货处理费和可售库存回流。
+- 两个 AGL 公司自有渠道按参考工具口径免计独立入库配置费；其余渠道计入。
 
 ## 广告测算模型边界
 
@@ -59,10 +62,11 @@ Amazon 未公开完整 Rating 权重。前台总 Rating 可能已经包含文字
 
 ## 可分享入口
 
+- FBA 利润测算：`#/fba`
 - 广告测算：`#/advertising-estimator`
 - 链接经营评分：`#/review-score`
 
-模块状态写入 URL Hash，刷新、浏览器前进/后退和分享链接时可保留当前工具入口。
+模块状态写入 URL Hash，刷新、浏览器前进/后退和分享链接时可保留当前工具入口。旧的 `#/packing` 与 `#/first-mile` 链接会自动转到 `#/fba`。
 
 ## 本地运行
 

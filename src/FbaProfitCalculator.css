@@ -1,0 +1,333 @@
+.fba-profit {
+  --fba-bg: #f3f5f4;
+  --fba-surface: #ffffff;
+  --fba-surface-soft: #f6f8f7;
+  --fba-border: #d9e0dc;
+  --fba-text: #1d2923;
+  --fba-muted: #69756f;
+  --fba-accent: #397656;
+  --fba-accent-strong: #285a40;
+  --fba-accent-soft: #e7f2eb;
+  --fba-gold: #a0782e;
+  --fba-good: #247349;
+  --fba-good-soft: #e8f4ec;
+  --fba-warn: #9b6819;
+  --fba-warn-soft: #fff4df;
+  --fba-danger: #ad453b;
+  --fba-danger-soft: #fcecea;
+  min-height: 100vh;
+  color: var(--fba-text);
+  background: var(--fba-bg);
+}
+
+.fba-profit__header {
+  min-height: 132px;
+  padding: 28px clamp(24px, 4vw, 60px) 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  background: var(--fba-surface);
+  border-bottom: 1px solid var(--fba-border);
+}
+
+.fba-profit__eyebrow {
+  color: var(--fba-gold);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.fba-profit__header h1 {
+  margin: 7px 0 5px;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.fba-profit__header p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--fba-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.fba-profit__source-link {
+  min-height: 40px;
+  padding: 9px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: #34463c;
+  background: #fff;
+  border: 1px solid #cad4ce;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.fba-profit__source-link:hover { background: #f5f8f6; border-color: #8fa097; }
+
+.fba-profit__page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px clamp(18px, 4vw, 60px) 60px;
+}
+
+.fba-profit__grid {
+  display: grid;
+  grid-template-columns: minmax(540px, 1.1fr) minmax(410px, .9fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.fba-profit__stack { min-width: 0; display: grid; gap: 16px; }
+
+.fba-profit__card {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--fba-surface);
+  border: 1px solid var(--fba-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(32, 46, 39, .045);
+}
+
+.fba-profit__card-head {
+  min-height: 56px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e4e9e6;
+}
+
+.fba-profit__card-head h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.fba-profit__card-code {
+  color: #8a958f;
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 12px;
+}
+
+.fba-profit__card-body { padding: 18px; }
+.fba-profit__section + .fba-profit__section { margin-top: 17px; }
+
+.fba-profit__section-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #46544c;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.fba-profit__field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fba-profit__field-grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fba-profit__field-grid--one { grid-template-columns: minmax(0, 1fr); }
+
+.fba-profit__field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: #536159;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.fba-profit__field-label { display: flex; align-items: baseline; gap: 5px; line-height: 1.35; }
+.fba-profit__unit { color: #849089; font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; font-weight: 500; }
+
+.fba-profit__field input,
+.fba-profit__field select {
+  width: 100%;
+  min-width: 0;
+  height: 43px;
+  padding: 0 11px;
+  color: var(--fba-text);
+  background-color: #fbfcfb;
+  border: 1px solid #c9d3cd;
+  border-radius: 6px;
+  outline: none;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fba-profit__field select {
+  padding-right: 34px;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #6c7a72 50%), linear-gradient(135deg, #6c7a72 50%, transparent 50%);
+  background-position: calc(100% - 17px) 18px, calc(100% - 12px) 18px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.fba-profit__field input:focus,
+.fba-profit__field select:focus {
+  border-color: #6d8a7a;
+  box-shadow: 0 0 0 3px rgba(57, 118, 86, .12);
+}
+
+.fba-profit__segmented {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fba-profit__segment {
+  min-width: 90px;
+  min-height: 41px;
+  padding: 8px 10px;
+  flex: 1 1 90px;
+  color: #637169;
+  background: var(--fba-surface-soft);
+  border: 1px solid #d2dad5;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.fba-profit__segment:hover { border-color: #9caaa2; }
+.fba-profit__segment[aria-pressed="true"] { color: var(--fba-accent-strong); background: var(--fba-accent-soft); border-color: #6e9d83; }
+.fba-profit__segment:focus-visible { outline: 3px solid rgba(57, 118, 86, .2); outline-offset: 1px; }
+
+.fba-profit__hint {
+  margin: 9px 0 0;
+  color: #7b8780;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.fba-profit__charge-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fba-profit__charge-card {
+  min-width: 0;
+  padding: 12px;
+  background: var(--fba-surface-soft);
+  border: 1px solid #d8dfdb;
+  border-radius: 7px;
+}
+
+.fba-profit__charge-card--selected { background: var(--fba-accent-soft); border-color: #6e9d83; }
+.fba-profit__charge-card span, .fba-profit__charge-card strong, .fba-profit__charge-card small { display: block; }
+.fba-profit__charge-card span { color: #6c7972; font-size: 13px; }
+.fba-profit__charge-card strong { margin-top: 6px; font-size: 19px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.fba-profit__charge-card small { margin-top: 4px; color: #7d8982; font-size: 12px; line-height: 1.4; }
+.fba-profit__charge-basis { width: fit-content; padding: 3px 6px; color: var(--fba-accent-strong) !important; background: #fff; border-radius: 4px; font-weight: 750; }
+
+.fba-profit__packing-field input { color: #925408; background: #fff8e7; border-color: #e0b869; font-weight: 750; }
+
+.fba-profit__table-wrap { margin-top: 15px; overflow-x: auto; border: 1px solid var(--fba-border); border-radius: 7px; }
+.fba-profit__table { width: 100%; min-width: 690px; border-collapse: collapse; font-size: 13px; }
+.fba-profit__table th { padding: 10px 8px; color: #66736c; background: #f3f6f4; border-right: 1px solid #dfe5e1; border-bottom: 1px solid #d7dfda; text-align: center; white-space: nowrap; }
+.fba-profit__table td { padding: 10px 8px; border-right: 1px solid #e3e8e5; border-bottom: 1px solid #e3e8e5; text-align: center; font-variant-numeric: tabular-nums; }
+.fba-profit__table th:last-child, .fba-profit__table td:last-child { border-right: 0; }
+.fba-profit__table tr:last-child td { border-bottom: 0; }
+.fba-profit__table td:first-child { font-weight: 750; text-align: left; }
+.fba-profit__table .fba-profit__method { color: #8d570f; background: #fff7e4; font-weight: 800; }
+
+.fba-profit__validation {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  color: var(--fba-good);
+  background: var(--fba-good-soft);
+  border: 1px solid #c8e2d1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.fba-profit__validation--bad { color: var(--fba-danger); background: var(--fba-danger-soft); border-color: #ecc8c4; }
+
+.fba-profit__sticky { position: sticky; top: 20px; }
+.fba-profit__result-body { padding: 19px; }
+.fba-profit__tier { display: inline-flex; align-items: center; padding: 7px 12px; color: var(--fba-accent-strong); background: var(--fba-accent-soft); border-radius: 999px; font-size: 14px; font-weight: 800; }
+.fba-profit__tier-sub { margin: 9px 0 16px; color: #6f7c75; font-size: 13px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+
+.fba-profit__stats { border-top: 1px solid #e3e8e5; }
+.fba-profit__stat {
+  min-height: 43px;
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  border-bottom: 1px dashed #dde4df;
+  font-size: 14px;
+}
+
+.fba-profit__stat span { color: #66736c; }
+.fba-profit__stat strong { text-align: right; font-variant-numeric: tabular-nums; }
+.fba-profit__stat--total { margin-top: 5px; padding-top: 13px; border-top: 2px solid #cbd5cf; border-bottom: 0; font-size: 16px; }
+.fba-profit__stat--total span, .fba-profit__stat--total strong { color: var(--fba-text); }
+.fba-profit__divider { height: 1px; margin: 15px 0 4px; background: #dce3df; }
+
+.fba-profit__margin-title { margin: 18px 0 10px; font-size: 15px; }
+.fba-profit__margin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.fba-profit__margin-card { position: relative; min-width: 0; padding: 13px 12px; background: var(--fba-surface-soft); border: 1px solid #d7dfda; border-radius: 7px; }
+.fba-profit__margin-card--selected { border-color: #6e9d83; box-shadow: 0 0 0 2px rgba(57, 118, 86, .11); }
+.fba-profit__margin-card--selected::after { content: "当前"; position: absolute; top: 9px; right: 9px; color: var(--fba-accent-strong); font-size: 11px; font-weight: 800; }
+.fba-profit__margin-card span, .fba-profit__margin-card strong, .fba-profit__margin-card small { display: block; }
+.fba-profit__margin-card span { min-height: 36px; padding-right: 34px; color: #65726b; font-size: 13px; font-weight: 700; line-height: 1.35; }
+.fba-profit__margin-card strong { margin-top: 5px; font-size: 22px; font-variant-numeric: tabular-nums; }
+.fba-profit__margin-card small { margin-top: 3px; color: #78847d; font-size: 12px; font-variant-numeric: tabular-nums; }
+.fba-profit__margin-card--good strong { color: var(--fba-good); }
+.fba-profit__margin-card--warn strong { color: var(--fba-warn); }
+.fba-profit__margin-card--bad strong { color: var(--fba-danger); }
+
+.fba-profit__note {
+  margin-top: 18px;
+  padding: 13px 14px;
+  color: #66736c;
+  background: #f6f8f7;
+  border-left: 3px solid #769583;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.fba-profit__note strong { color: #34443b; }
+.fba-profit__note a { color: var(--fba-accent-strong); font-weight: 700; }
+
+@media (max-width: 1180px) {
+  .fba-profit__grid { grid-template-columns: minmax(470px, 1fr) minmax(360px, .82fr); }
+  .fba-profit__field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 980px) {
+  .fba-profit__grid { grid-template-columns: 1fr; }
+  .fba-profit__sticky { position: static; }
+  .fba-profit__field-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fba-profit__field-grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .fba-profit__header { min-height: auto; padding: 20px 18px; align-items: flex-start; flex-direction: column; gap: 14px; }
+  .fba-profit__header h1 { font-size: 24px; }
+  .fba-profit__source-link { width: 100%; }
+  .fba-profit__page { padding: 16px 12px 42px; }
+  .fba-profit__card-head, .fba-profit__card-body, .fba-profit__result-body { padding-left: 14px; padding-right: 14px; }
+  .fba-profit__field-grid, .fba-profit__field-grid--two { grid-template-columns: 1fr; }
+  .fba-profit__charge-grid { grid-template-columns: 1fr; }
+  .fba-profit__margin-grid { grid-template-columns: 1fr; }
+  .fba-profit__stat { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .fba-profit__stat strong { text-align: left; }
+}
