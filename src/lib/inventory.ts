@@ -20,7 +20,9 @@ export interface InventoryInput {
   unitWeightLb: number;
   customRemovalFee: number | null;
   liquidationQuantity: number;
+  averageSellingPrice: number;
   unitCost: number;
+  firstMileCostPerUnit: number | null;
   recoveryRate: number;
   forecastMonths: number;
 }
@@ -64,14 +66,21 @@ export interface InventoryResult {
   agedInventoryFee: number;
   removalFeePerUnit: number;
   removalTotalFee: number;
+  liquidationQuantity: number;
+  liquidationRecoveryReady: boolean;
+  liquidationConfigured: boolean;
   liquidationProcessingFeePerUnit: number;
   liquidationProductCost: number;
+  liquidationFirstMileCost: number;
+  liquidationCurrentMonthStorageFee: number;
   liquidationGrossRecovery: number;
   liquidationReferralFee: number;
   liquidationProcessingFee: number;
+  liquidationAmazonFees: number;
   liquidationNetRecovery: number;
+  liquidationPnlPerUnit: number;
+  liquidationPnl: number;
   liquidationLoss: number;
-  combinedStressCost: number;
   remainingInventoryValue: number;
   forecast: ForecastRow[];
   projectedHoldingCost: number;
@@ -82,6 +91,10 @@ export interface InventoryResult {
 }
 
 const MS_PER_DAY = 86_400_000;
+
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
 
 function parseDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -154,7 +167,8 @@ export function calculateRemovalFeePerUnit(sizeTier: InventorySizeTier, unitWeig
 }
 
 export function calculateLiquidationProcessingFee(sizeTier: InventorySizeTier, unitWeightLb: number): number {
-  const weight = Math.max(0, unitWeightLb);
+  if (!Number.isFinite(unitWeightLb) || unitWeightLb <= 0) return 0;
+  const weight = unitWeightLb;
   if (sizeTier === "standard") {
     if (weight <= 0.5) return 0.25;
     if (weight <= 1) return 0.30;
@@ -216,6 +230,7 @@ function chooseDecision(
   currentInventory: number,
   removalQuantity: number,
   liquidationQuantity: number,
+  liquidationConfigured: boolean,
 ): { decision: DecisionAction; decisionTitle: string; decisionReason: string } {
   if (averageDailySales > 0 && daysOfSupply <= 90 && inventoryAgeDays < 181) {
     return { decision: "continue", decisionTitle: "继续销售", decisionReason: `预计 ${Math.ceil(daysOfSupply)} 天可售完，且尚未进入 181 天库龄附加费区间。` };
@@ -223,10 +238,15 @@ function chooseDecision(
   const holdingCostPerUnit = currentInventory > 0 ? projectedHoldingCost / currentInventory : 0;
   const comparedRemovalHoldingCost = holdingCostPerUnit * removalQuantity;
   const comparedLiquidationHoldingCost = holdingCostPerUnit * liquidationQuantity;
-  if (comparedRemovalHoldingCost > 0 && removalTotalFee > 0 && comparedRemovalHoldingCost > removalTotalFee && removalTotalFee <= liquidationLoss) {
+  if (
+    comparedRemovalHoldingCost > 0
+    && removalTotalFee > 0
+    && comparedRemovalHoldingCost > removalTotalFee
+    && (!liquidationConfigured || removalTotalFee <= liquidationLoss)
+  ) {
     return { decision: "remove", decisionTitle: "优先评估移除", decisionReason: `所选 ${removalQuantity} 件的预测持有成本 $${comparedRemovalHoldingCost.toFixed(2)} 高于移除费 $${removalTotalFee.toFixed(2)}，移除后仍可保留货值。` };
   }
-  if (comparedLiquidationHoldingCost > liquidationLoss && liquidationLoss > 0) {
+  if (liquidationConfigured && comparedLiquidationHoldingCost > liquidationLoss && liquidationLoss > 0) {
     return { decision: "liquidate", decisionTitle: "优先评估批量清货", decisionReason: `所选 ${liquidationQuantity} 件的清货损失 $${liquidationLoss.toFixed(2)} 低于对应预测持有成本 $${comparedLiquidationHoldingCost.toFixed(2)}。` };
   }
   return {
@@ -263,13 +283,36 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
 
   const liquidationQuantity = Math.min(currentInventory, Math.max(0, Math.floor(input.liquidationQuantity)));
   const liquidationProcessingFeePerUnit = calculateLiquidationProcessingFee(input.sizeTier, input.unitWeightLb);
+  const averageSellingPrice = Math.max(0, input.averageSellingPrice);
+  const recoveryRate = Math.min(1, Math.max(0, input.recoveryRate));
+  const liquidationRecoveryReady = liquidationQuantity > 0
+    && averageSellingPrice > 0
+    && recoveryRate > 0
+    && input.unitWeightLb > 0;
+  const liquidationConfigured = liquidationRecoveryReady
+    && input.unitCost > 0
+    && unitVolume > 0
+    && input.firstMileCostPerUnit !== null;
   const liquidationProductCost = liquidationQuantity * Math.max(0, input.unitCost);
-  const liquidationGrossRecovery = liquidationProductCost * Math.min(1, Math.max(0, input.recoveryRate));
-  const liquidationReferralFee = liquidationGrossRecovery * 0.15;
+  const liquidationFirstMileCost = liquidationQuantity * Math.max(0, input.firstMileCostPerUnit ?? 0);
+  const liquidationCurrentMonthStorageFee = liquidationQuantity * unitVolume * storageRates.totalRate;
+  const liquidationGrossRecoveryPerUnit = roundCurrency(averageSellingPrice * recoveryRate);
+  const liquidationReferralFeePerUnit = roundCurrency(liquidationGrossRecoveryPerUnit * 0.15);
+  const liquidationNetRecoveryPerUnit = roundCurrency(
+    liquidationGrossRecoveryPerUnit - liquidationReferralFeePerUnit - liquidationProcessingFeePerUnit,
+  );
+  const liquidationGrossRecovery = liquidationQuantity * liquidationGrossRecoveryPerUnit;
+  const liquidationReferralFee = liquidationQuantity * liquidationReferralFeePerUnit;
   const liquidationProcessingFee = liquidationQuantity * liquidationProcessingFeePerUnit;
-  const liquidationNetRecovery = Math.max(0, liquidationGrossRecovery - liquidationReferralFee - liquidationProcessingFee);
-  const liquidationLoss = Math.max(0, liquidationProductCost - liquidationNetRecovery);
-  const combinedStressCost = monthlyStorageFee + agedInventoryFee + removalTotalFee + liquidationLoss;
+  const liquidationAmazonFees = liquidationReferralFee + liquidationProcessingFee;
+  const liquidationNetRecovery = liquidationQuantity * liquidationNetRecoveryPerUnit;
+  const liquidationPnl = liquidationConfigured
+    ? liquidationNetRecovery - liquidationProductCost - liquidationFirstMileCost - liquidationCurrentMonthStorageFee
+    : 0;
+  const liquidationPnlPerUnit = liquidationConfigured && liquidationQuantity > 0
+    ? liquidationPnl / liquidationQuantity
+    : 0;
+  const liquidationLoss = liquidationConfigured ? Math.max(0, -liquidationPnl) : 0;
   const remainingInventoryValue = currentInventory * Math.max(0, input.unitCost);
   const forecast = forecastHoldingCosts(input, inventoryAgeDays);
   const projectedHoldingCost = forecast.reduce((sum, row) => sum + row.totalFee, 0);
@@ -283,11 +326,18 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     currentInventory,
     removalQuantity,
     liquidationQuantity,
+    liquidationConfigured,
   );
   const warnings: string[] = [];
   if (input.currentDate < input.inboundDate) warnings.push("当前日期早于入仓日期，库龄按 0 天处理。");
   if (input.removalQuantity > currentInventory) warnings.push("移除数量超过当前库存，计算已按当前库存截断。");
   if (input.liquidationQuantity > currentInventory) warnings.push("清货数量超过当前库存，计算已按当前库存截断。");
+  if (liquidationQuantity > 0 && averageSellingPrice <= 0) warnings.push("已填写清货数量，但 ASP 未填写，无法按售价测算毛回收。");
+  if (liquidationQuantity > 0 && recoveryRate <= 0) warnings.push("清货回收率为 0；可使用 5%、7.5% 或 10% 情景进行测算。");
+  if (liquidationQuantity > 0 && input.unitWeightLb <= 0) warnings.push("Amazon Shipping Weight 未填写，无法确认 Liquidations processing fee。");
+  if (liquidationQuantity > 0 && input.unitCost <= 0) warnings.push("采购成本未填写，完整批清 P&L 暂不生成。");
+  if (liquidationQuantity > 0 && input.firstMileCostPerUnit === null) warnings.push("头程成本未填写；如确认无头程成本，请明确输入 0。");
+  if (liquidationQuantity > 0 && unitVolume <= 0) warnings.push("单件体积未填写，当月仓储费无法进入批清 P&L。");
   if (!input.dangerousGoods && input.utilizationEligible) warnings.push("Storage Utilization Surcharge 仅对符合 Amazon 资格且库龄超过 30 天的库存适用。");
   warnings.push("实际费用以 Amazon 记录的平均每日库存、库龄分布、尺寸重量与下单时费率为准。");
 
@@ -306,14 +356,21 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     agedInventoryFee,
     removalFeePerUnit,
     removalTotalFee,
+    liquidationQuantity,
+    liquidationRecoveryReady,
+    liquidationConfigured,
     liquidationProcessingFeePerUnit,
     liquidationProductCost,
+    liquidationFirstMileCost,
+    liquidationCurrentMonthStorageFee,
     liquidationGrossRecovery,
     liquidationReferralFee,
     liquidationProcessingFee,
+    liquidationAmazonFees,
     liquidationNetRecovery,
+    liquidationPnlPerUnit,
+    liquidationPnl,
     liquidationLoss,
-    combinedStressCost,
     remainingInventoryValue,
     forecast,
     projectedHoldingCost,

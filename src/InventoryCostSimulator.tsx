@@ -30,6 +30,7 @@ import { numberInputValue } from "./lib/input";
 const OFFICIAL_STORAGE_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/G3EDYEF6KUCFQTNM";
 const OFFICIAL_2026_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/G201411300";
 const OFFICIAL_REMOVAL_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/GZ5Q2VW5WF4JWRGC";
+const OFFICIAL_LIQUIDATION_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/GYVCG5Q3BEJ6MLMF";
 
 function localDateString(): string {
   const now = new Date();
@@ -59,8 +60,10 @@ function createDefaultInput(): InventoryInput {
     unitWeightLb: 0,
     customRemovalFee: null,
     liquidationQuantity: 0,
+    averageSellingPrice: 0,
     unitCost: 0,
-    recoveryRate: 0,
+    firstMileCostPerUnit: null,
+    recoveryRate: 0.075,
     forecastMonths: 0,
   };
 }
@@ -83,6 +86,12 @@ function integer(value: string): number {
 
 function money(value: number): string {
   return Number.isFinite(value) ? value.toFixed(2) : "0.00";
+}
+
+function signedMoney(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}$${money(Math.abs(value))}`;
 }
 
 function number(value: number, digits = 2): string {
@@ -110,6 +119,8 @@ async function writeClipboard(text: string): Promise<void> {
 }
 
 function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
+  const recoveryPending = "待补齐回收输入";
+  const pnlPending = "待补齐 P&L 输入";
   return [
     { 分区: "基础信息", 项目: "SKU", 数值: input.sku },
     { 分区: "基础信息", 项目: "ASIN", 数值: input.asin },
@@ -126,10 +137,26 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
     { 分区: "移除方案", 项目: "移除数量", 数值: Math.min(input.currentInventory, input.removalQuantity) },
     { 分区: "移除方案", 项目: "单件移除费（$）", 数值: money(result.removalFeePerUnit) },
     { 分区: "移除方案", 项目: "总移除费（$）", 数值: money(result.removalTotalFee) },
-    { 分区: "清货方案", 项目: "清货产品成本（$）", 数值: money(result.liquidationProductCost) },
-    { 分区: "清货方案", 项目: "预计毛回收（$）", 数值: money(result.liquidationGrossRecovery) },
-    { 分区: "清货方案", 项目: "预计净回收（$）", 数值: money(result.liquidationNetRecovery) },
-    { 分区: "清货方案", 项目: "预计清货损失（$）", 数值: money(result.liquidationLoss) },
+    { 分区: "清货方案", 项目: "测算状态", 数值: result.liquidationConfigured ? "完整 P&L" : "待补齐输入" },
+    { 分区: "清货方案", 项目: "清货数量（件）", 数值: result.liquidationQuantity },
+    { 分区: "清货方案", 项目: "ASP（$/件）", 数值: input.averageSellingPrice > 0 ? money(input.averageSellingPrice) : recoveryPending },
+    { 分区: "清货方案", 项目: "回收率", 数值: `${number(input.recoveryRate * 100, 1)}%` },
+    { 分区: "清货方案", 项目: "Amazon Shipping Weight（lb）", 数值: input.unitWeightLb > 0 ? number(input.unitWeightLb) : recoveryPending },
+    { 分区: "清货方案", 项目: "Processing fee（$/件）", 数值: result.liquidationRecoveryReady ? money(result.liquidationProcessingFeePerUnit) : recoveryPending },
+    { 分区: "清货方案", 项目: "预计毛回收（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationGrossRecovery) : recoveryPending },
+    { 分区: "清货方案", 项目: "Referral fee 15%（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationReferralFee) : recoveryPending },
+    { 分区: "清货方案", 项目: "Processing fee 合计（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationProcessingFee) : recoveryPending },
+    { 分区: "清货方案", 项目: "Amazon 费用合计（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationAmazonFees) : recoveryPending },
+    { 分区: "清货方案", 项目: "预计净回收（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationNetRecovery) : recoveryPending },
+    { 分区: "清货方案", 项目: "采购成本（$/件）", 数值: result.liquidationConfigured ? money(input.unitCost) : pnlPending },
+    { 分区: "清货方案", 项目: "头程成本（$/件）", 数值: result.liquidationConfigured ? money(input.firstMileCostPerUnit ?? 0) : pnlPending },
+    { 分区: "清货方案", 项目: "当月仓储（$/件）", 数值: result.liquidationConfigured && result.liquidationQuantity > 0 ? money(result.liquidationCurrentMonthStorageFee / result.liquidationQuantity) : pnlPending },
+    { 分区: "清货方案", 项目: "采购成本合计（$）", 数值: result.liquidationConfigured ? money(result.liquidationProductCost) : pnlPending },
+    { 分区: "清货方案", 项目: "头程成本合计（$）", 数值: result.liquidationConfigured ? money(result.liquidationFirstMileCost) : pnlPending },
+    { 分区: "清货方案", 项目: "当月仓储分摊（$）", 数值: result.liquidationConfigured ? money(result.liquidationCurrentMonthStorageFee) : pnlPending },
+    { 分区: "清货方案", 项目: "批清损益/件（$）", 数值: result.liquidationConfigured ? money(result.liquidationPnlPerUnit) : pnlPending },
+    { 分区: "清货方案", 项目: "批清损益合计（$）", 数值: result.liquidationConfigured ? money(result.liquidationPnl) : pnlPending },
+    { 分区: "清货方案", 项目: "预计亏损（$，仅负损益）", 数值: result.liquidationConfigured ? money(result.liquidationLoss) : pnlPending },
     { 分区: "决策", 项目: "建议动作", 数值: result.decisionTitle },
     { 分区: "决策", 项目: "判断依据", 数值: result.decisionReason },
   ];
@@ -167,6 +194,9 @@ function InventoryCostSimulator() {
   const [copied, setCopied] = useState(false);
   const result = useMemo(() => calculateInventoryCosts(input), [input]);
   const maxForecastFee = Math.max(1, ...result.forecast.map((row) => row.totalFee));
+  const liquidationStatusText = result.liquidationQuantity <= 0
+    ? "请先填写清货数量"
+    : "请补齐 ASP、采购成本、头程、单件体积与 Shipping Weight";
 
   const update = (key: keyof InventoryInput, value: InventoryInput[keyof InventoryInput]) => {
     setInput((current) => ({ ...current, [key]: value } as InventoryInput));
@@ -183,8 +213,18 @@ function InventoryCostSimulator() {
       `预计月仓储费：$${money(result.monthlyStorageFee)}`,
       `预计老化库存费：$${money(result.agedInventoryFee)}`,
       `移除方案：$${money(result.removalTotalFee)}`,
-      `清货净回收：$${money(result.liquidationNetRecovery)}`,
-      `清货预计损失：$${money(result.liquidationLoss)}`,
+      `清货数量：${result.liquidationQuantity} 件`,
+      `ASP：${input.averageSellingPrice > 0 ? `$${money(input.averageSellingPrice)} / 件` : "待补齐回收输入"}`,
+      `回收率：${number(input.recoveryRate * 100, 1)}%`,
+      `Shipping Weight：${input.unitWeightLb > 0 ? `${number(input.unitWeightLb)} lb` : "待补齐回收输入"}`,
+      `清货毛回收：${result.liquidationRecoveryReady ? signedMoney(result.liquidationGrossRecovery) : "待补齐回收输入"}`,
+      `Referral fee（15%）：${result.liquidationRecoveryReady ? `−$${money(result.liquidationReferralFee)}` : "待补齐回收输入"}`,
+      `Processing fee：${result.liquidationRecoveryReady ? `−$${money(result.liquidationProcessingFee)}（$${money(result.liquidationProcessingFeePerUnit)}/件）` : "待补齐回收输入"}`,
+      `清货净回收：${result.liquidationRecoveryReady ? signedMoney(result.liquidationNetRecovery) : "待补齐回收输入"}`,
+      `采购成本：${result.liquidationConfigured ? `−$${money(result.liquidationProductCost)}` : "待补齐 P&L 输入"}`,
+      `头程成本：${result.liquidationConfigured ? `−$${money(result.liquidationFirstMileCost)}` : "待补齐 P&L 输入"}`,
+      `当月仓储分摊：${result.liquidationConfigured ? `−$${money(result.liquidationCurrentMonthStorageFee)}` : "待补齐 P&L 输入"}`,
+      `批清 P&L：${result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "待补齐输入"}`,
       `未来持有成本：$${money(result.projectedHoldingCost)}`,
       `建议动作：${result.decisionTitle}`,
       `判断依据：${result.decisionReason}`,
@@ -233,7 +273,9 @@ function InventoryCostSimulator() {
                 <label className="field-label"><span>当前库存（件）</span><input type="number" min="0" step="1" value={numberInputValue(input.currentInventory)} onChange={(event) => update("currentInventory", integer(event.target.value))} /></label>
                 <label className="field-label"><span>单件体积（cu ft）</span><input type="number" min="0" step="0.001" value={numberInputValue(input.unitVolumeCuFt)} onChange={(event) => update("unitVolumeCuFt", numeric(event.target.value))} /></label>
                 <label className="field-label"><span>平均日销</span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageDailySales)} onChange={(event) => update("averageDailySales", numeric(event.target.value))} /></label>
-                <label className="field-label"><span>单件产品成本（$）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitCost)} onChange={(event) => update("unitCost", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>ASP / 平均售价（$/件）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageSellingPrice)} onChange={(event) => update("averageSellingPrice", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>采购成本（$/件）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitCost)} onChange={(event) => update("unitCost", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>头程成本（$/件，可填 0）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.firstMileCostPerUnit)} onChange={(event) => update("firstMileCostPerUnit", event.target.value === "" ? null : numeric(event.target.value))} /></label>
                 <label className="field-label"><span>入仓日期</span><input type="date" value={input.inboundDate} onChange={(event) => update("inboundDate", event.target.value)} /></label>
                 <label className="field-label"><span>当前日期</span><input type="date" value={input.currentDate} onChange={(event) => update("currentDate", event.target.value)} /></label>
               </div>
@@ -275,10 +317,16 @@ function InventoryCostSimulator() {
             <div className="inventory-form-section">
               <div className="section-label"><PackageMinus size={15} /> 退出方案参数</div>
               <div className="inventory-form-grid">
-                <label className="field-label"><span>单件重量（lb）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitWeightLb)} onChange={(event) => update("unitWeightLb", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>Amazon Shipping Weight（lb）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitWeightLb)} onChange={(event) => update("unitWeightLb", numeric(event.target.value))} /></label>
                 <label className="field-label"><span>移除数量</span><input type="number" min="0" step="1" value={numberInputValue(input.removalQuantity)} onChange={(event) => update("removalQuantity", integer(event.target.value))} /></label>
                 <label className="field-label"><span>清货数量</span><input type="number" min="0" step="1" value={numberInputValue(input.liquidationQuantity)} onChange={(event) => update("liquidationQuantity", integer(event.target.value))} /></label>
-                <label className="field-label"><span>预计毛回收率</span><div className="percent-input"><input type="number" min="0" max="100" step="0.1" value={numberInputValue(input.recoveryRate * 100)} onChange={(event) => update("recoveryRate", Math.min(1, numeric(event.target.value) / 100))} /><b>%</b></div></label>
+                <label className="field-label"><span>预计回收率（按 ASP）</span><div className="percent-input"><input type="number" min="0" max="15" step="0.1" value={numberInputValue(input.recoveryRate * 100)} onChange={(event) => update("recoveryRate", Math.min(0.15, numeric(event.target.value) / 100))} /><b>%</b></div></label>
+              </div>
+              <small className="inventory-field-hint">Shipping Weight 请优先采用 Seller Central 计费重；仅填产品实重可能低估 Processing fee。</small>
+              <div className="liquidation-rate-scenarios" aria-label="清货回收率情景">
+                <span>快速情景</span>
+                {[0.05, 0.075, 0.10].map((rate) => <button className={Math.abs(input.recoveryRate - rate) < 0.0001 ? "active" : ""} type="button" key={rate} onClick={() => update("recoveryRate", rate)}>{number(rate * 100, rate === 0.075 ? 1 : 0)}%</button>)}
+                <small>Amazon 常见估算区间为 ASP 的 5%–10%</small>
               </div>
               <div className="custom-rate-row removal-rate-row">
                 <label className="inventory-check-row compact">
@@ -319,7 +367,7 @@ function InventoryCostSimulator() {
               <div><span>库存总体积</span><strong>{number(result.totalVolume)}<small> cu ft</small></strong></div>
               <div><span>预计月仓储费</span><strong>${money(result.monthlyStorageFee)}</strong></div>
               <div><span>当前老化库存费</span><strong className={result.agedInventoryFee > 0 ? "warning-text" : "success-text"}>${money(result.agedInventoryFee)}</strong></div>
-              <div><span>剩余库存货值</span><strong>${money(result.remainingInventoryValue)}</strong></div>
+              <div><span>当前库存货值</span><strong>${money(result.remainingInventoryValue)}</strong></div>
             </div>
 
             <article className="inventory-section">
@@ -366,39 +414,49 @@ function InventoryCostSimulator() {
                 <div className="exit-plan-amount"><span>预计总移除费用</span><strong>${money(result.removalTotalFee)}</strong></div>
                 <dl>
                   <div><dt>计算数量</dt><dd>{Math.min(input.currentInventory, input.removalQuantity)} 件</dd></div>
-                  <div><dt>单件重量</dt><dd>{number(input.unitWeightLb)} lb</dd></div>
+                  <div><dt>Shipping Weight</dt><dd>{number(input.unitWeightLb)} lb</dd></div>
                   <div><dt>单件移除费</dt><dd>${money(result.removalFeePerUnit)}</dd></div>
                   <div><dt>移除后货权</dt><dd>货物可退回或处置</dd></div>
                 </dl>
                 <a href={OFFICIAL_REMOVAL_RULE} target="_blank" rel="noreferrer">Amazon removal fee <ExternalLink size={12} /></a>
               </article>
 
-              <article className="exit-plan liquidation-plan">
-                <div className="exit-plan-title"><TrendingDown size={20} /><div><h2>批量清货方案</h2><p>毛回收扣除 15% referral fee 与 processing fee</p></div></div>
-                <div className="exit-plan-amount"><span>预计清货损失</span><strong>${money(result.liquidationLoss)}</strong></div>
+              <article className={`exit-plan liquidation-plan ${result.liquidationConfigured ? "is-ready" : "is-pending"}`}>
+                <div className="exit-plan-title"><TrendingDown size={20} /><div><h2>批量清货方案</h2><p>ASP 回收 → Amazon 费用 → 全成本 P&amp;L</p></div></div>
+                <div className={`exit-plan-amount ${result.liquidationConfigured && result.liquidationPnl >= 0 ? "pnl-positive" : "pnl-negative"}`}>
+                  <span>{result.liquidationConfigured ? "预计批清损益" : "批清损益待测算"}</span>
+                  <strong>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</strong>
+                  <small>{result.liquidationConfigured ? `${signedMoney(result.liquidationPnlPerUnit)} / 件` : liquidationStatusText}</small>
+                </div>
                 <dl>
-                  <div><dt>产品总成本</dt><dd>${money(result.liquidationProductCost)}</dd></div>
-                  <div><dt>预计毛回收</dt><dd>${money(result.liquidationGrossRecovery)}</dd></div>
-                  <div><dt>15% Referral fee</dt><dd>-${money(result.liquidationReferralFee)}</dd></div>
-                  <div><dt>Processing fee</dt><dd>-${money(result.liquidationProcessingFee)}</dd></div>
-                  <div className="net"><dt>预计净回收</dt><dd>${money(result.liquidationNetRecovery)}</dd></div>
+                  <div><dt>计算数量</dt><dd>{result.liquidationQuantity || "—"} 件</dd></div>
+                  <div><dt>ASP × 回收率</dt><dd>{input.averageSellingPrice > 0 ? `$${money(input.averageSellingPrice)} × ${number(input.recoveryRate * 100, 1)}%` : "—"}</dd></div>
+                  <div><dt>预计毛回收</dt><dd>{result.liquidationRecoveryReady ? signedMoney(result.liquidationGrossRecovery) : "—"}</dd></div>
+                  <div><dt>15% Referral fee</dt><dd>{result.liquidationRecoveryReady ? `−$${money(result.liquidationReferralFee)}` : "—"}</dd></div>
+                  <div><dt>Processing fee</dt><dd>{result.liquidationRecoveryReady ? `−$${money(result.liquidationProcessingFee)}` : "—"} <small>{input.unitWeightLb > 0 ? `($${money(result.liquidationProcessingFeePerUnit)}/件)` : ""}</small></dd></div>
+                  <div><dt>Amazon 费用合计</dt><dd>{result.liquidationRecoveryReady ? `−$${money(result.liquidationAmazonFees)}` : "—"}</dd></div>
+                  <div className="net"><dt>预计净回收</dt><dd>{result.liquidationRecoveryReady ? signedMoney(result.liquidationNetRecovery) : "—"}</dd></div>
+                  <div><dt>采购成本</dt><dd>{result.liquidationConfigured ? `−$${money(result.liquidationProductCost)}` : "—"}</dd></div>
+                  <div><dt>头程成本</dt><dd>{result.liquidationConfigured ? `−$${money(result.liquidationFirstMileCost)}` : "—"}</dd></div>
+                  <div><dt>当月仓储分摊</dt><dd>{result.liquidationConfigured ? `−$${money(result.liquidationCurrentMonthStorageFee)}` : "—"}</dd></div>
+                  <div className="net"><dt>批清 P&amp;L 合计</dt><dd>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</dd></div>
                 </dl>
-                <p>毛回收率当前按产品成本口径输入；实际清算报价和回收金额以 Amazon 及清算商结果为准。</p>
+                <p>{result.liquidationConfigured ? "P&L 已扣采购成本、头程与本月仓储；不含未来仓储和老化库存费。" : liquidationStatusText} 实际报价以 Amazon 及清算商结果为准。</p>
+                <a href={OFFICIAL_LIQUIDATION_RULE} target="_blank" rel="noreferrer">Amazon FBA Liquidations <ExternalLink size={12} /></a>
               </article>
             </div>
 
             <article className="inventory-section cost-summary-section">
               <div className="inventory-section-heading">
-                <div><span>03</span><div><h2>库存处理成本汇总</h2><p>当前费用快照与退出方案压力测试</p></div></div>
+                <div><span>03</span><div><h2>库存处理方案对比</h2><p>当前费用快照与互斥退出方案</p></div></div>
               </div>
               <div className="cost-summary-table">
                 <div><span>月仓储费</span><b>${money(result.monthlyStorageFee)}</b></div>
                 <div><span>老化库存费用</span><b>${money(result.agedInventoryFee)}</b></div>
                 <div><span>库存移除费用</span><b>${money(result.removalTotalFee)}</b></div>
-                <div><span>批量清货损失</span><b>${money(result.liquidationLoss)}</b></div>
-                <div className="stress-total"><span>全部项目压力汇总</span><b>${money(result.combinedStressCost)}</b></div>
+                <div><span>批量清货损益</span><b>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</b></div>
               </div>
-              <p className="inventory-rule-note neutral"><Info size={14} /> 移除与清货是互斥方案。“压力汇总”仅满足全项目查看，不代表这些费用会同时发生；决策应分别比较未来持有成本、移除费和清货损失。</p>
+              <p className="inventory-rule-note neutral"><Info size={14} /> 移除与清货是互斥方案，不能相加。批清 P&amp;L 已包含所选数量的本月仓储分摊；决策应分别比较未来持有成本、移除费和清货损失。</p>
             </article>
 
             <article className="inventory-section forecast-section">
@@ -432,7 +490,7 @@ function InventoryCostSimulator() {
               <div className="decision-comparison">
                 <div><small>未来持有成本</small><b>${money(result.projectedHoldingCost)}</b></div>
                 <div><small>移除费用</small><b>${money(result.removalTotalFee)}</b></div>
-                <div><small>清货损失</small><b>${money(result.liquidationLoss)}</b></div>
+                <div><small>清货损益</small><b>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</b></div>
               </div>
             </article>
 
@@ -445,6 +503,7 @@ function InventoryCostSimulator() {
               <a href={OFFICIAL_STORAGE_RULE} target="_blank" rel="noreferrer">Monthly storage fees <ExternalLink size={12} /></a>
               <a href={OFFICIAL_2026_RULE} target="_blank" rel="noreferrer">Aged inventory surcharge <ExternalLink size={12} /></a>
               <a href={OFFICIAL_REMOVAL_RULE} target="_blank" rel="noreferrer">Removal & liquidation <ExternalLink size={12} /></a>
+              <a href={OFFICIAL_LIQUIDATION_RULE} target="_blank" rel="noreferrer">FBA Liquidations P&amp;L <ExternalLink size={12} /></a>
             </footer>
           </section>
         </div>

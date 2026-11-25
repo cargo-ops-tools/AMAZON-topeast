@@ -459,6 +459,12 @@ button { letter-spacing: 0; }
 .percent-input { position: relative; }
 .percent-input input { padding-right: 28px; }
 .percent-input b { position: absolute; right: 10px; top: 13px; color: #78837d; font-size: 10px; }
+.liquidation-rate-scenarios { padding: 8px 9px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; background: #f7f9f7; border: 1px solid #e1e6e2; border-radius: 5px; }
+.liquidation-rate-scenarios > span { margin-right: 2px; color: #68746e; font-size: 8px; font-weight: 700; }
+.liquidation-rate-scenarios button { min-width: 45px; min-height: 27px; padding: 5px 8px; color: #5f6d65; background: #fff; border: 1px solid #d3dbd6; border-radius: 4px; font-size: 8px; font-weight: 700; cursor: pointer; }
+.liquidation-rate-scenarios button.active { color: #fff; background: #315a46; border-color: #315a46; }
+.liquidation-rate-scenarios small { flex: 1 0 100%; color: #87918c; font-size: 7px; line-height: 1.4; }
+.inventory-field-hint { margin-top: -4px; color: #7d8982; font-size: 7px; line-height: 1.45; }
 .removal-rate-row { margin-top: 1px; }
 .forecast-field { max-width: 180px; }
 .inventory-results { min-width: 0; display: grid; gap: 16px; }
@@ -525,14 +531,18 @@ button { letter-spacing: 0; }
 .exit-plan-title h2 { margin: 0; font-size: 13px; }
 .exit-plan-title p { margin: 4px 0 0; color: #7e8983; font-size: 8px; line-height: 1.45; }
 .exit-plan-amount { margin: 15px 0 10px; padding: 13px 14px; color: #fff; background: #294438; border-radius: 5px; }
-.exit-plan-amount span, .exit-plan-amount strong { display: block; }
+.exit-plan-amount span, .exit-plan-amount strong, .exit-plan-amount small { display: block; }
 .exit-plan-amount span { color: #b7c8bf; font-size: 8px; }
 .exit-plan-amount strong { margin-top: 4px; font-size: 24px; font-variant-numeric: tabular-nums; }
+.exit-plan-amount small { margin-top: 5px; color: #d6dfda; font-size: 8px; }
 .liquidation-plan .exit-plan-amount { background: #6f4c30; }
+.liquidation-plan .exit-plan-amount.pnl-positive { background: #2e5d46; }
+.liquidation-plan.is-pending .exit-plan-amount { background: #5f6863; }
 .exit-plan dl { margin: 0; }
 .exit-plan dl > div { padding: 8px 2px; display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e4e8e5; font-size: 9px; }
 .exit-plan dt { color: #748079; }
 .exit-plan dd { margin: 0; color: #29372f; font-weight: 700; text-align: right; }
+.exit-plan dd small { color: #7f8984; font-size: 7px; font-weight: 500; }
 .exit-plan dl .net { color: #285f42; background: #f0f6f2; }
 .exit-plan dl .net dt, .exit-plan dl .net dd { color: inherit; }
 .exit-plan > a { margin-top: 11px; display: inline-flex; align-items: center; gap: 4px; color: #52645b; font-size: 8px; font-weight: 700; text-decoration: none; }
@@ -540,8 +550,6 @@ button { letter-spacing: 0; }
 .cost-summary-table { padding: 5px 18px 0; }
 .cost-summary-table > div { min-height: 41px; padding: 10px 2px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-bottom: 1px solid #e3e8e4; color: #5e6a63; font-size: 9px; }
 .cost-summary-table b { color: #29372f; font-size: 11px; font-variant-numeric: tabular-nums; }
-.cost-summary-table .stress-total { margin: 7px 0 0; padding: 13px 12px; color: #fff; background: #2b4338; border: 0; border-radius: 5px; font-weight: 700; }
-.cost-summary-table .stress-total b { color: #f0c268; font-size: 17px; }
 .forecast-table-wrap { overflow-x: auto; }
 .forecast-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 9px; }
 .forecast-table th { padding: 10px 11px; color: #69756e; background: #f2f5f3; border-bottom: 1px solid #dce2de; font-size: 8px; text-align: left; white-space: nowrap; }
