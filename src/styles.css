@@ -1836,6 +1836,40 @@ button { letter-spacing: 0; }
 .listing-score-toolbar button, .review-tool-divider button, .listing-result-actions button, .review-result-actions button { min-height: 38px; padding: 8px 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #315744; background: #fff; border: 1px solid #cbd6cf; border-radius: 5px; font-size: 14px; font-weight: 700; cursor: pointer; }
 .listing-score-toolbar button:hover, .review-tool-divider button:hover, .listing-result-actions button:hover, .review-result-actions button:hover { background: #f3f7f4; border-color: #8da596; }
 .listing-result-actions button:disabled, .review-result-actions button:disabled { opacity: .45; cursor: default; }
+.listing-grade-guide { overflow: hidden; background: #fff; border: 1px solid #d9dfdb; border-radius: 7px; box-shadow: 0 6px 20px rgba(32, 46, 39, .035); }
+.listing-grade-guide > summary { min-height: 64px; padding: 13px 17px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #2f493b; background: #f7f9f7; cursor: pointer; list-style: none; }
+.listing-grade-guide > summary::-webkit-details-marker { display: none; }
+.listing-grade-guide > summary:focus-visible { outline: 3px solid rgba(91, 123, 108, .2); outline-offset: -3px; }
+.listing-grade-guide-title { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.listing-grade-guide-title > svg { flex: 0 0 auto; color: #7d6634; }
+.listing-grade-guide-title b, .listing-grade-guide-title small { display: block; }
+.listing-grade-guide-title b { color: #2b4035; font-size: 16px; }
+.listing-grade-guide-title small { margin-top: 3px; color: #738078; font-size: 13px; line-height: 1.4; }
+.listing-grade-guide-toggle { flex: 0 0 auto; min-width: 82px; padding: 7px 10px; color: #315744; background: #fff; border: 1px solid #cbd6cf; border-radius: 5px; font-size: 13px; font-weight: 800; text-align: center; }
+.listing-grade-guide .when-open { display: none; }
+.listing-grade-guide[open] .when-closed { display: none; }
+.listing-grade-guide[open] .when-open { display: inline; }
+.listing-grade-guide-body { padding: 0 17px 17px; border-top: 1px solid #e1e6e2; }
+.listing-grade-guide-intro { margin: 0 -17px 15px; padding: 13px 17px; color: #536158; background: #fbfcfb; font-size: 14px; line-height: 1.55; }
+.listing-grade-guide-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.listing-grade-guide-card { min-width: 0; padding: 14px; background: #fbfcfb; border: 1px solid #dce3de; border-top-width: 4px; border-radius: 6px; }
+.listing-grade-guide-card > div { display: flex; align-items: center; gap: 9px; }
+.listing-grade-guide-card > div strong { width: 34px; height: 34px; display: grid; place-items: center; color: #193025; background: #b7d9c2; border-radius: 5px; font-size: 18px; }
+.listing-grade-guide-card > div span { color: #34483d; font-size: 14px; font-weight: 800; }
+.listing-grade-guide-card p { margin: 11px 0 0; color: #5d6962; font-size: 13px; line-height: 1.55; }
+.listing-grade-guide-card p b { margin-bottom: 3px; display: block; color: #34483d; font-size: 12px; }
+.listing-grade-guide-card.guide-grade-s { border-top-color: #67b786; }
+.listing-grade-guide-card.guide-grade-s > div strong { background: #86d3a2; }
+.listing-grade-guide-card.guide-grade-a { border-top-color: #91c5a2; }
+.listing-grade-guide-card.guide-grade-a > div strong { background: #b3ddbf; }
+.listing-grade-guide-card.guide-grade-b { border-top-color: #d4ad49; }
+.listing-grade-guide-card.guide-grade-b > div strong { background: #ead17f; }
+.listing-grade-guide-card.guide-grade-c { border-top-color: #a95640; }
+.listing-grade-guide-card.guide-grade-c > div strong { color: #fff; background: #b96851; }
+.listing-grade-redline-note { margin-top: 11px; padding: 12px 13px; display: flex; align-items: flex-start; gap: 9px; color: #7e342b; background: #fff1ee; border: 1px solid #ecc8c1; border-radius: 6px; }
+.listing-grade-redline-note > svg { margin-top: 1px; flex: 0 0 auto; }
+.listing-grade-redline-note strong { font-size: 14px; }
+.listing-grade-redline-note p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; }
 .listing-sample-banner { padding: 11px 14px; display: flex; align-items: flex-start; gap: 8px; color: #785821; background: #fff7e8; border: 1px solid #e9d5ac; border-radius: 6px; font-size: 14px; line-height: 1.55; }
 .listing-sample-banner svg { margin-top: 2px; flex: 0 0 auto; }
 .listing-score-hero { min-height: 236px; padding: 24px 26px; display: grid; grid-template-columns: minmax(210px, .62fr) minmax(480px, 1.55fr) minmax(190px, .55fr); align-items: center; gap: 24px; color: #fff; background: #20362d; border-radius: 7px; box-shadow: 0 9px 26px rgba(32, 54, 45, .08); }
@@ -1945,6 +1979,7 @@ button { letter-spacing: 0; }
 
 @media (max-width: 940px) {
   .listing-score-toolbar, .review-tool-divider { align-items: flex-start; flex-direction: column; }
+  .listing-grade-guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .listing-score-hero { grid-template-columns: 1fr; }
   .listing-completeness { grid-column: auto; }
   .listing-score-workspace { grid-template-columns: 1fr; }
@@ -1957,6 +1992,12 @@ button { letter-spacing: 0; }
   .listing-score-toolbar h2, .review-tool-divider h2 { font-size: 20px; }
   .listing-score-toolbar > div:last-child, .review-tool-divider > div:last-child { width: 100%; }
   .listing-score-toolbar button, .review-tool-divider button { flex: 1; }
+  .listing-grade-guide > summary { align-items: flex-start; padding: 13px 14px; }
+  .listing-grade-guide-title { align-items: flex-start; }
+  .listing-grade-guide-toggle { min-width: 68px; padding: 7px 8px; font-size: 12px; }
+  .listing-grade-guide-body { padding: 0 12px 12px; }
+  .listing-grade-guide-intro { margin: 0 -12px 12px; padding: 12px; }
+  .listing-grade-guide-grid { grid-template-columns: 1fr; }
   .listing-score-hero { padding: 21px 17px; gap: 18px; }
   .listing-score-primary > strong { font-size: 40px; }
   .listing-dimension-grid { grid-template-columns: 1fr 1fr; }

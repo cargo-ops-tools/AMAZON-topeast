@@ -78,6 +78,33 @@ const GRADE_PLAN = {
   C: "暂停扩量：先处理红线、负利润、合规或核心数据缺口。",
 } as const;
 
+const GRADE_GUIDE = [
+  {
+    grade: "S",
+    title: "核心增长链接",
+    rule: "总分 ≥ 85；数据完整度 ≥ 90%；链接抑制与 IP/TRO 风险均已确认；无红线。",
+    action: GRADE_PLAN.S,
+  },
+  {
+    grade: "A",
+    title: "重点运营链接",
+    rule: "总分 ≥ 75；数据完整度 ≥ 80%；无红线。",
+    action: GRADE_PLAN.A,
+  },
+  {
+    grade: "B",
+    title: "修复观察链接",
+    rule: "总分 ≥ 60；无红线。数据完整度不足时，即使分数较高也可能暂定为 B。",
+    action: GRADE_PLAN.B,
+  },
+  {
+    grade: "C",
+    title: "暂停扩量链接",
+    rule: "总分 < 60，或触发利润为负、链接抑制、高 IP/TRO 风险任一红线。",
+    action: GRADE_PLAN.C,
+  },
+] as const;
+
 function cloneEmptyInput(): ListingScoreInput {
   return {
     content: { ...EMPTY_LISTING_SCORE_INPUT.content },
@@ -263,6 +290,32 @@ function ListingScorePanel() {
           <button type="button" onClick={clear}><RotateCcw size={16} /> 清空</button>
         </div>
       </div>
+
+      <details className="listing-grade-guide">
+        <summary>
+          <span className="listing-grade-guide-title">
+            <Info size={18} />
+            <span><b>S/A/B/C 评级说明</b><small>查看等级门槛、经营含义与强制降级红线</small></span>
+          </span>
+          <span className="listing-grade-guide-toggle"><span className="when-closed">展开说明</span><span className="when-open">收起说明</span></span>
+        </summary>
+        <div className="listing-grade-guide-body">
+          <p className="listing-grade-guide-intro">总分按已填写指标加权标准化；空白字段不按 0 分处理，但会降低数据完整度。评级顺序为：先检查红线，再看完整度，最后看总分。</p>
+          <div className="listing-grade-guide-grid">
+            {GRADE_GUIDE.map((item) => (
+              <article className={`listing-grade-guide-card guide-grade-${item.grade.toLowerCase()}`} key={item.grade}>
+                <div><strong>{item.grade}</strong><span>{item.title}</span></div>
+                <p><b>评级条件</b>{item.rule}</p>
+                <p><b>经营动作</b>{item.action}</p>
+              </article>
+            ))}
+          </div>
+          <div className="listing-grade-redline-note">
+            <ShieldAlert size={18} />
+            <div><strong>强制降为 C 的红线</strong><p>月利润或利润率为负、Listing 被抑制，或侵权 / TRO 风险为“高”。即使综合得分达到 S/A，也优先按 C 处理。</p></div>
+          </div>
+        </div>
+      </details>
 
       {isSample && (
         <div className="listing-sample-banner" role="status">
