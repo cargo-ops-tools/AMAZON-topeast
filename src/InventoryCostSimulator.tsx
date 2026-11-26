@@ -163,7 +163,7 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
     { 分区: "移除方案", 项目: "移除数量", 数值: Math.min(input.currentInventory, input.removalQuantity) },
     { 分区: "移除方案", 项目: "单件移除费（$）", 数值: removalReady ? money(result.removalFeePerUnit) : packagePending },
     { 分区: "移除方案", 项目: "总移除费用现金流（$）", 数值: removalReady ? money(-result.removalTotalFee) : packagePending },
-    { 分区: "清货方案", 项目: "测算状态", 数值: result.liquidationConfigured ? "完整 P&L" : "待补齐输入" },
+    { 分区: "清货方案", 项目: "测算状态", 数值: result.liquidationConfigured ? "采购与头程 P&L" : "待补齐输入" },
     { 分区: "清货方案", 项目: "清货数量（件）", 数值: result.liquidationQuantity },
     { 分区: "清货方案", 项目: "ASP（$/件）", 数值: input.averageSellingPrice > 0 ? money(input.averageSellingPrice) : recoveryPending },
     { 分区: "清货方案", 项目: "回收率", 数值: `${number(input.recoveryRate * 100, 1)}%` },
@@ -176,10 +176,8 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
     { 分区: "清货方案", 项目: "预计净回收（$）", 数值: result.liquidationRecoveryReady ? money(result.liquidationNetRecovery) : recoveryPending },
     { 分区: "清货方案", 项目: "采购成本（$/件）", 数值: result.liquidationConfigured ? money(input.unitCost) : pnlPending },
     { 分区: "清货方案", 项目: "头程成本（$/件）", 数值: result.liquidationConfigured ? money(input.firstMileCostPerUnit ?? 0) : pnlPending },
-    { 分区: "清货方案", 项目: "当月仓储（$/件）", 数值: result.liquidationConfigured && result.liquidationQuantity > 0 ? money(result.liquidationCurrentMonthStorageFee / result.liquidationQuantity) : pnlPending },
     { 分区: "清货方案", 项目: "采购成本合计（$）", 数值: result.liquidationConfigured ? money(result.liquidationProductCost) : pnlPending },
     { 分区: "清货方案", 项目: "头程成本合计（$）", 数值: result.liquidationConfigured ? money(result.liquidationFirstMileCost) : pnlPending },
-    { 分区: "清货方案", 项目: "当月仓储分摊（$）", 数值: result.liquidationConfigured ? money(result.liquidationCurrentMonthStorageFee) : pnlPending },
     { 分区: "清货方案", 项目: "批清损益/件（$）", 数值: result.liquidationConfigured ? money(result.liquidationPnlPerUnit) : pnlPending },
     { 分区: "清货方案", 项目: "批清损益合计（$）", 数值: result.liquidationConfigured ? money(result.liquidationPnl) : pnlPending },
     { 分区: "清货方案", 项目: "预计亏损（$，仅负损益）", 数值: result.liquidationConfigured ? money(result.liquidationLoss) : pnlPending },
@@ -271,7 +269,6 @@ function InventoryCostSimulator() {
       `清货净回收：${result.liquidationRecoveryReady ? signedMoney(result.liquidationNetRecovery) : "待补齐回收输入"}`,
       `采购成本：${result.liquidationConfigured ? `−$${money(result.liquidationProductCost)}` : "待补齐 P&L 输入"}`,
       `头程成本：${result.liquidationConfigured ? `−$${money(result.liquidationFirstMileCost)}` : "待补齐 P&L 输入"}`,
-      `当月仓储分摊：${result.liquidationConfigured ? `−$${money(result.liquidationCurrentMonthStorageFee)}` : "待补齐 P&L 输入"}`,
       `批清 P&L：${result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "待补齐输入"}`,
       `未来持有成本：${result.projectedHoldingCostReady ? `$${money(result.projectedHoldingCost)}` : "待填写有效入仓日期"}`,
       `建议动作：${result.decisionTitle}`,
@@ -494,7 +491,7 @@ function InventoryCostSimulator() {
               </article>
 
               <article className={`exit-plan liquidation-plan ${result.liquidationConfigured ? "is-ready" : "is-pending"}`}>
-                <div className="exit-plan-title"><TrendingDown size={20} /><div><h2>批量清货方案</h2><p>ASP 回收 → Amazon 费用 → 全成本 P&amp;L</p></div></div>
+                <div className="exit-plan-title"><TrendingDown size={20} /><div><h2>批量清货方案</h2><p>ASP 回收 → Amazon 费用 → 采购与头程 P&amp;L</p></div></div>
                 <div className={`exit-plan-amount ${result.liquidationConfigured && result.liquidationPnl >= 0 ? "pnl-positive" : "pnl-negative"}`}>
                   <span>{result.liquidationConfigured ? "预计批清损益" : "批清损益待测算"}</span>
                   <strong>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</strong>
@@ -510,10 +507,9 @@ function InventoryCostSimulator() {
                   <div className="net"><dt>预计净回收</dt><dd>{result.liquidationRecoveryReady ? signedMoney(result.liquidationNetRecovery) : "—"}</dd></div>
                   <div><dt>采购成本</dt><dd>{result.liquidationConfigured ? `−$${money(result.liquidationProductCost)}` : "—"}</dd></div>
                   <div><dt>头程成本</dt><dd>{result.liquidationConfigured ? `−$${money(result.liquidationFirstMileCost)}` : "—"}</dd></div>
-                  <div><dt>当月仓储分摊</dt><dd>{result.liquidationConfigured ? `−$${money(result.liquidationCurrentMonthStorageFee)}` : "—"}</dd></div>
                   <div className="net"><dt>批清 P&amp;L 合计</dt><dd>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</dd></div>
                 </dl>
-                <p>{result.liquidationConfigured ? "P&L 已扣采购成本、头程与本月仓储；不含未来仓储和老化库存费。" : liquidationStatusText} 实际报价以 Amazon 及清算商结果为准。</p>
+                <p>{result.liquidationConfigured ? "P&L 已扣采购成本与头程成本；月仓储费在下方方案对比中单独列示，不重复扣减。" : liquidationStatusText} 实际报价以 Amazon 及清算商结果为准。</p>
                 <a href={OFFICIAL_LIQUIDATION_RULE} target="_blank" rel="noreferrer">Amazon FBA Liquidations <ExternalLink size={12} /></a>
               </article>
             </div>
@@ -523,12 +519,12 @@ function InventoryCostSimulator() {
                 <div><span>03</span><div><h2>库存处理方案对比</h2><p>当前费用快照与互斥退出方案</p></div></div>
               </div>
               <div className="cost-summary-table">
-                <div><span>月仓储费</span><b>${money(result.monthlyStorageFee)}</b></div>
+                <div><span>当前整仓月仓储费</span><b>${money(result.monthlyStorageFee)}</b></div>
                 <div><span>老化库存费用</span><b>{result.agedCalculationReady ? `$${money(result.agedInventoryFee)}` : "—"}</b></div>
                 <div><span>库存移除费用</span><b>{removalConfigured ? outflowMoney(result.removalTotalFee) : "—"}</b></div>
                 <div><span>批量清货损益</span><b>{result.liquidationConfigured ? signedMoney(result.liquidationPnl) : "—"}</b></div>
               </div>
-              <p className="inventory-rule-note neutral"><Info size={14} /> 移除与清货是互斥方案，不能相加。批清 P&amp;L 已包含所选数量的本月仓储分摊；决策应分别比较未来持有成本、移除费和清货损失。</p>
+              <p className="inventory-rule-note neutral"><Info size={14} /> 移除与清货是互斥方案，不能相加。当前整仓月仓储费单独列示，未计入批清 P&amp;L，避免重复扣减；决策应分别比较持有成本、移除费和清货损失。</p>
             </article>
 
             <article className="inventory-section forecast-section">

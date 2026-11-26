@@ -100,7 +100,6 @@ export interface InventoryResult {
   liquidationProcessingFeePerUnit: number;
   liquidationProductCost: number;
   liquidationFirstMileCost: number;
-  liquidationCurrentMonthStorageFee: number;
   liquidationGrossRecovery: number;
   liquidationReferralFee: number;
   liquidationProcessingFee: number;
@@ -507,7 +506,6 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     && input.firstMileCostPerUnit !== null;
   const liquidationProductCost = liquidationQuantity * Math.max(0, input.unitCost);
   const liquidationFirstMileCost = liquidationQuantity * Math.max(0, input.firstMileCostPerUnit ?? 0);
-  const liquidationCurrentMonthStorageFee = liquidationQuantity * unitVolume * storageRates.totalRate;
   const liquidationGrossRecoveryPerUnit = roundCurrency(averageSellingPrice * recoveryRate);
   const liquidationReferralFeePerUnit = roundCurrency(liquidationGrossRecoveryPerUnit * 0.15);
   const liquidationNetRecoveryPerUnit = roundCurrency(
@@ -519,7 +517,7 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
   const liquidationAmazonFees = liquidationReferralFee + liquidationProcessingFee;
   const liquidationNetRecovery = liquidationQuantity * liquidationNetRecoveryPerUnit;
   const liquidationPnl = liquidationConfigured
-    ? liquidationNetRecovery - liquidationProductCost - liquidationFirstMileCost - liquidationCurrentMonthStorageFee
+    ? liquidationNetRecovery - liquidationProductCost - liquidationFirstMileCost
     : 0;
   const liquidationPnlPerUnit = liquidationConfigured && liquidationQuantity > 0
     ? liquidationPnl / liquidationQuantity
@@ -551,7 +549,7 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
   if (liquidationQuantity > 0 && averageSellingPrice <= 0) warnings.push("已填写清货数量，但 ASP 未填写，无法按售价测算毛回收。");
   if (liquidationQuantity > 0 && recoveryRate <= 0) warnings.push("清货回收率为 0；可使用 5%、7.5% 或 10% 情景进行测算。");
   if ((removalQuantity > 0 || liquidationQuantity > 0) && !packageClassification.valid) warnings.push("包装长、宽、高或实际重量未补齐，无法自动判定 Size Tier 与 Shipping Weight。");
-  if (liquidationQuantity > 0 && input.unitCost <= 0) warnings.push("采购成本未填写，完整批清 P&L 暂不生成。");
+  if (liquidationQuantity > 0 && input.unitCost <= 0) warnings.push("采购成本未填写，批清 P&L 暂不生成。");
   if (liquidationQuantity > 0 && input.firstMileCostPerUnit === null) warnings.push("头程成本未填写；如确认无头程成本，请明确输入 0。");
   if (packageClassification.outOfRange) warnings.push("包装或重量超出内置 Size Tier 范围，当前按 Extra-large 150+ lb 估算，请以 Seller Central 为准。");
   if (!input.dangerousGoods && input.utilizationEligible) warnings.push("Storage Utilization Surcharge 仅对符合 Amazon 资格且库龄超过 30 天的库存适用。");
@@ -581,7 +579,6 @@ export function calculateInventoryCosts(input: InventoryInput): InventoryResult 
     liquidationProcessingFeePerUnit,
     liquidationProductCost,
     liquidationFirstMileCost,
-    liquidationCurrentMonthStorageFee,
     liquidationGrossRecovery,
     liquidationReferralFee,
     liquidationProcessingFee,

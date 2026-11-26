@@ -202,18 +202,19 @@ describe("complete inventory scenario", () => {
     expect(result.liquidationNetRecovery).toBeCloseTo(319.2, 6);
     expect(result.liquidationProductCost).toBeCloseTo(3360, 6);
     expect(result.liquidationFirstMileCost).toBeCloseTo(1050, 6);
-    expect(result.liquidationCurrentMonthStorageFee).toBeCloseTo(74.403677, 6);
-    expect(result.liquidationPnl).toBeCloseTo(-4165.203677, 6);
-    expect(result.liquidationLoss).toBeCloseTo(4165.203677, 6);
+    expect(result.liquidationPnl).toBeCloseTo(-4090.8, 6);
+    expect(result.liquidationLoss).toBeCloseTo(4090.8, 6);
     expect(result.forecast.length).toBe(6);
     expect(result.projectedHoldingCostReady).toBe(true);
   });
 
-  it("uses the selected season for current storage and liquidation storage allocation", () => {
-    const result = calculateInventoryCosts({ ...input, currentDate: "2026-07-28", storageSeason: "peak" });
-    expect(result.storageRates.season).toBe("peak");
-    expect(result.monthlyBaseStorageFee).toBeCloseTo(result.totalVolume * 2.40, 6);
-    expect(result.liquidationCurrentMonthStorageFee).toBeCloseTo(result.totalVolume * 2.40, 6);
+  it("keeps monthly storage separate from liquidation P&L", () => {
+    const offPeak = calculateInventoryCosts({ ...input, currentDate: "2026-07-28", storageSeason: "offPeak" });
+    const peak = calculateInventoryCosts({ ...input, currentDate: "2026-07-28", storageSeason: "peak" });
+    expect(peak.storageRates.season).toBe("peak");
+    expect(peak.monthlyBaseStorageFee).toBeCloseTo(peak.totalVolume * 2.40, 6);
+    expect(peak.monthlyStorageFee).toBeGreaterThan(offPeak.monthlyStorageFee);
+    expect(peak.liquidationPnl).toBeCloseTo(offPeak.liquidationPnl, 6);
   });
 
   it("uses the selected season for forecast month one, then follows calendar months", () => {
