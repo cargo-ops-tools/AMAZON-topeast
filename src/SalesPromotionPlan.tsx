@@ -352,7 +352,7 @@ function SalesPromotionPlan() {
       <section className="sales-plan-hero">
         <div className="sales-plan-hero-title">
           <span>SALES PROMOTION PLAN</span>
-          <h2>销售推广计划</h2>
+          <h2>12个月经营推进节奏</h2>
           <p>统一推演销量、自然单、广告、库存和月度利润。实际月份使用实际费用，计划月份使用预算单价。</p>
         </div>
         <div className="sales-plan-hero-primary">

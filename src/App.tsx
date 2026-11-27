@@ -3,6 +3,7 @@ import {
   BadgeDollarSign,
   Boxes,
   Calculator,
+  CalendarRange,
   ChevronRight,
   Clock3,
   CircleDollarSign,
@@ -19,11 +20,13 @@ import InventoryCostSimulator from "./InventoryCostSimulator";
 import ProfitDecisionDesk from "./ProfitDecisionDesk";
 import ProfitSimulator from "./ProfitSimulator";
 import ReviewScoreCalculator from "./ReviewScoreCalculator";
+import SalesPromotionPlanPage from "./SalesPromotionPlanPage";
 
 const MODULE_IDS = [
   "fba",
   "inventory",
   "profit",
+  "sales-plan",
   "review-score",
   "simulation",
   "cargo-declaration",
@@ -110,6 +113,11 @@ function App() {
             <span><b>利润测算器</b><small>运营利润、广告与决策</small></span>
             <ChevronRight size={16} />
           </button>
+          <button className={`nav-item ${activeModule === "sales-plan" ? "active" : ""}`} type="button" aria-current={activeModule === "sales-plan" ? "page" : undefined} onClick={() => selectModule("sales-plan")}>
+            <CalendarRange size={18} />
+            <span><b>销售推广计划</b><small>12个月销量、广告与利润</small></span>
+            <ChevronRight size={16} />
+          </button>
           <button className={`nav-item ${activeModule === "review-score" ? "active" : ""}`} type="button" aria-current={activeModule === "review-score" ? "page" : undefined} onClick={() => selectModule("review-score")}>
             <Star size={18} />
             <span><b>链接经营评分</b><small>S/A/B/C + Review</small></span>
@@ -146,6 +154,7 @@ function App() {
       <div className="module-screen" hidden={activeModule !== "fba"}><FbaProfitCalculator /></div>
       <div className="module-screen" hidden={activeModule !== "inventory"}><InventoryCostSimulator /></div>
       <div className="module-screen" hidden={activeModule !== "profit"}><ProfitSimulator /></div>
+      <div className="module-screen" hidden={activeModule !== "sales-plan"}><SalesPromotionPlanPage /></div>
       <div className="module-screen" hidden={activeModule !== "review-score"}><ReviewScoreCalculator /></div>
       <div className="module-screen" hidden={activeModule !== "simulation"}><ProfitDecisionDesk /></div>
       <div className="module-screen" hidden={activeModule !== "cargo-declaration"}><CargoDeclarationCalculator /></div>

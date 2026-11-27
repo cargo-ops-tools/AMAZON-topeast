@@ -2104,8 +2104,10 @@ button { letter-spacing: 0; }
 }
 
 /* Sales promotion plan */
-.profit-tabs { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.sales-plan-root { margin-top: 16px; display: grid; gap: 16px; color: #26332d; }
+.sales-plan-main { min-width: 0; }
+.sales-plan-topbar { align-items: flex-end; }
+.sales-plan-page { padding: 22px clamp(18px, 4vw, 60px) 56px; }
+.sales-plan-root { display: grid; gap: 16px; color: #26332d; }
 .sales-plan-root .profit-panel { overflow: visible; }
 .sales-plan-hero { min-height: 184px; padding: 26px 28px; display: grid; grid-template-columns: minmax(280px, 1.25fr) minmax(230px, .7fr) auto; align-items: center; gap: 26px; color: #fff; background: linear-gradient(135deg, #20362d 0%, #294b3b 100%); border-radius: 7px; box-shadow: 0 12px 28px rgba(30, 48, 39, .12); }
 .sales-plan-hero-title > span { color: #e3b65e; font-size: 10px; font-weight: 800; letter-spacing: .09em; }
@@ -2213,6 +2215,7 @@ button { letter-spacing: 0; }
 }
 
 @media (max-width: 760px) {
+  .sales-plan-page { padding-left: 12px; padding-right: 12px; }
   .sales-plan-hero { padding: 22px 20px; grid-template-columns: 1fr; gap: 16px; }
   .sales-plan-hero-actions { grid-column: auto; justify-self: stretch; }
   .sales-plan-hero-actions button { flex: 1; }
@@ -2235,6 +2238,8 @@ button { letter-spacing: 0; }
 }
 
 @media print {
+  .sidebar, .sales-plan-topbar { display: none !important; }
+  .sales-plan-page { padding: 0; }
   .sales-plan-hero-actions, .sales-plan-table-heading button { display: none !important; }
   .sales-plan-root { display: block; }
   .sales-plan-root > * { margin-bottom: 12px; }

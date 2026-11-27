@@ -7,6 +7,7 @@
 - FBA 利润测算（2026 US Size Tier、配送费、仓储费、入库配置费、头程与单件利润一体化）
 - FBA 库存成本推演
 - 亚马逊利润测算器（运营版）
+- 销售推广计划（12个月销量、广告、库存、月利润与资金缺口滚动推演）
 - 链接经营评分（六维 100 分、S/A/B/C 链接规划 + Review/Rating 情景推演）
 - 货物申报金额（40HQ 装箱排布与单件申报金额）
 - 单位标准化、2026 Size Tier、Shipping Weight、体积重诊断
@@ -67,6 +68,7 @@ Amazon 未公开完整 Rating 权重。前台总 Rating 可能已经包含文字
 ## 可分享入口
 
 - FBA 利润测算：`#/fba`
+- 销售推广计划：`#/sales-plan`
 - 广告测算：`#/advertising-estimator`
 - 链接经营评分：`#/review-score`
 
