@@ -115,7 +115,7 @@ function App() {
           </button>
           <button className={`nav-item ${activeModule === "sales-plan" ? "active" : ""}`} type="button" aria-current={activeModule === "sales-plan" ? "page" : undefined} onClick={() => selectModule("sales-plan")}>
             <CalendarRange size={18} />
-            <span><b>销售推广计划</b><small>12个月销量、广告与利润</small></span>
+            <span><b>销售推广计划</b><small>按月销量、广告与利润</small></span>
             <ChevronRight size={16} />
           </button>
           <button className={`nav-item ${activeModule === "review-score" ? "active" : ""}`} type="button" aria-current={activeModule === "review-score" ? "page" : undefined} onClick={() => selectModule("review-score")}>

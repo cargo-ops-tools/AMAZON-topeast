@@ -1,93 +1,70 @@
-export type SalesPlanPeriodType = "actual" | "plan";
 export type SalesPlanStatusSeverity = "ok" | "warning" | "error";
 
 export interface SalesPlanAssumptions {
   productName: string;
   productId: string;
   currency: string;
-  startMonth: string;
-  initialInventory: number;
-  unitsPerOrder: number;
+  actualSellingPrice: number;
   productCostPerUnit: number;
-  packagingCostPerUnit: number;
-  budgetFbaPerUnit: number;
-  budgetFirstMilePerUnit: number;
+  storageCostPerUnit: number;
+  fbaFeePerUnit: number;
+  firstMileCostPerUnit: number;
   referralFeeRate: number;
   returnRate: number;
   averageReturnLoss: number;
-  otherNetExpensePoolRate: number;
-  monthlyFixedOperatingCost: number;
-  initialInvestment: number;
+  otherVariableCostRate: number;
 }
 
 export interface SalesPlanMonthInput {
   id: string;
   month: string;
-  periodType: SalesPlanPeriodType;
   stage: string;
   action: string;
   targetDailyUnits: number;
-  naturalDailyOrders: number;
-  unitPrice: number;
-  promotionDiscountRate: number;
-  promotionOrderShare: number;
   cpo: number;
   cpc: number;
-  receipts: number;
-  storageCost: number;
-  couponExpenseRate: number;
-  dealExpenseRate: number;
-  vineExpenseRate: number;
-  actualRefundLoss: number | null;
-  actualFbaFee: number | null;
-  actualFirstMileCost: number | null;
+  naturalOrderShare: number;
+  otherVariableCostRateOverride: number | null;
 }
 
 export interface SalesPlanMonthResult extends SalesPlanMonthInput {
   days: number;
-  targetUnits: number;
-  openingInventory: number;
-  availableInventory: number;
-  actualUnits: number;
-  stockoutUnits: number;
-  endingInventory: number;
-  totalOrders: number | null;
-  plannedNaturalOrders: number;
-  naturalOrders: number | null;
-  adOrders: number | null;
+  monthlyUnits: number;
+  naturalUnits: number;
+  adUnits: number;
+  salesRevenue: number;
   adSpend: number | null;
   adClicks: number | null;
   adCvr: number | null;
-  grossSales: number;
-  promotionDiscount: number;
-  netSalesBeforeRefund: number;
-  averageNetAsp: number | null;
-  adSales: number | null;
+  adSales: number;
   acos: number | null;
   tacos: number | null;
-  referralFee: number;
-  productAndPackagingCost: number;
-  fbaCost: number | null;
-  firstMileCost: number | null;
-  expectedRefundLoss: number;
-  refundLoss: number | null;
-  residualOtherNetExpenseRate: number;
-  totalOtherNetExpenseRate: number;
-  otherNetExpense: number;
+  referralFeePerUnit: number;
+  expectedRefundLossPerUnit: number;
+  effectiveOtherVariableCostRate: number;
+  otherVariableCostPerUnit: number;
+  breakEvenCpo: number | null;
+  monthlyBreakEvenCpo: number | null;
+  productCostTotal: number;
+  firstMileCostTotal: number;
+  fbaCostTotal: number;
+  referralFeeTotal: number;
+  storageMultiplier: number;
+  storageCostTotal: number;
+  expectedRefundLossTotal: number;
+  promotionCostTotal: number;
   profitBeforeAds: number | null;
-  preAdUnitProfit: number | null;
   monthlyProfit: number | null;
   profitMargin: number | null;
   cumulativeProfit: number | null;
-  inventoryCoverageDays: number | null;
   status: string;
   statusSeverity: SalesPlanStatusSeverity;
   warnings: string[];
 }
 
 export interface SalesPlanSummary {
-  totalUnits: number;
-  totalNetSales: number;
+  totalUnits: number | null;
+  totalRevenue: number | null;
   totalAdSpend: number | null;
   operatingProfit: number | null;
   endingCumulativeProfit: number | null;
@@ -96,7 +73,7 @@ export interface SalesPlanSummary {
   weightedAcos: number | null;
   negativeProfitMonths: number;
   abnormalMonths: number;
-  endingInventory: number;
+  breakEvenCpo: number | null;
   isComplete: boolean;
 }
 
@@ -109,86 +86,74 @@ export const DEFAULT_SALES_PLAN_ASSUMPTIONS: SalesPlanAssumptions = {
   productName: "B251042样例",
   productId: "B251042",
   currency: "USD",
-  startMonth: "2026-12",
-  initialInventory: 3000,
-  unitsPerOrder: 1,
+  actualSellingPrice: 24.99,
   productCostPerUnit: 3.84,
-  packagingCostPerUnit: 0,
-  budgetFbaPerUnit: 5.52,
-  budgetFirstMilePerUnit: 0.61,
+  storageCostPerUnit: 0,
+  fbaFeePerUnit: 5.52,
+  firstMileCostPerUnit: 0.61,
   referralFeeRate: 0.15,
   returnRate: 0.08,
   averageReturnLoss: 10,
-  otherNetExpensePoolRate: 0.037,
-  monthlyFixedOperatingCost: 300,
-  initialInvestment: 5000,
+  otherVariableCostRate: 0.037,
 };
 
-const STAGES = ["测款期", "测款期", "增长期", "增长期", "增长期", "盈利过渡期", "盈利过渡期", "盈利过渡期", "稳定期", "稳定期", "稳定期", "稳定期"];
-const ACTIONS = [
-  "低预算测词，验证主图、价格和基础CVR",
-  "清理低转化词，建立核心Exact词",
-  "放大高CVR词，补充Review与视频素材",
-  "扩大核心词预算，控制无效Placement",
-  "提高自然排名，降低泛词预算占比",
-  "压降CPO，复核Coupon与毛利空间",
-  "稳定核心词，减少低效促销依赖",
-  "扩大自然单，保持广告订单质量",
-  "以利润为主，按TACoS安全线分配预算",
-  "优化长尾词，控制库存与补货节奏",
-  "维持高效词，复核退货与实际账单",
-  "年度复盘，确定下一周期预算与库存",
-];
-const DAILY_UNITS = [10, 12, 15, 18, 20, 22, 25, 25, 28, 30, 30, 32];
-const NATURAL_DAILY_ORDERS = [2, 3, 4, 6, 8, 10, 12, 13, 15, 17, 18, 20];
-const PROMOTION_DISCOUNT_RATES = [0.15, 0.15, 0.1, 0.1, 0.1, 0.05, 0.05, 0.05, 0, 0, 0, 0];
-const PROMOTION_ORDER_SHARES = [0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.2, 0, 0, 0, 0];
-const CPOS = [14, 13.5, 13, 12.5, 12, 11.5, 11, 10.8, 10.5, 10.2, 10, 9.8];
-const CPCS = [0.7, 0.68, 0.65, 0.62, 0.6, 0.58, 0.56, 0.55, 0.54, 0.53, 0.52, 0.5];
-const RECEIPTS = [0, 0, 0, 2000, 0, 0, 2000, 0, 0, 2000, 0, 0];
+export const SALES_PLAN_STAGE_ACTIONS: Record<string, string[]> = {
+  测款期: ["低预算测词，验证主图、价格和基础CVR", "收集Search Term，清理无关词", "测试价格与Coupon对转化率的影响"],
+  增长期: ["放大高CVR词，增加Exact预算", "提升核心Keyword自然排名", "补充Review、视频与A+内容", "优化Placement，降低无效点击"],
+  盈利过渡期: ["压降CPO，保留高利润广告词", "减少促销依赖，提高自然单占比", "复核退货、仓储和实际账单"],
+  稳定期: ["按TACoS安全线分配预算", "维持高效词，拓展长尾Keyword", "根据利润调整投放节奏", "月度复盘并制定下一周期目标"],
+};
 
-function parseMonth(month: string): { year: number; monthIndex: number } {
+const DEFAULT_STAGES = ["测款期", "测款期", "增长期", "增长期", "增长期", "盈利过渡期", "盈利过渡期", "盈利过渡期", "稳定期", "稳定期", "稳定期", "稳定期"];
+const DEFAULT_DAILY_UNITS = [10, 12, 15, 18, 20, 22, 25, 25, 28, 30, 30, 32];
+const DEFAULT_NATURAL_SHARES = [0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7];
+const DEFAULT_CPOS = [14, 13.5, 13, 12.5, 12, 11.5, 11, 10.8, 10.5, 10.2, 10, 9.8];
+const DEFAULT_CPCS = [0.7, 0.68, 0.65, 0.62, 0.6, 0.58, 0.56, 0.55, 0.54, 0.53, 0.52, 0.5];
+const PEAK_STORAGE_MULTIPLIER = 3.08;
+
+function parseMonth(month: string): { year: number; monthIndex: number } | null {
   const match = /^(\d{4})-(\d{2})$/.exec(month);
-  if (!match) return { year: 2026, monthIndex: 11 };
+  if (!match) return null;
   const year = Number(match[1]);
-  const monthIndex = Math.min(11, Math.max(0, Number(match[2]) - 1));
+  const monthIndex = Number(match[2]) - 1;
+  if (!Number.isInteger(year) || year < 1900 || year > 9999 || monthIndex < 0 || monthIndex > 11) return null;
   return { year, monthIndex };
 }
 
 export function addMonths(month: string, offset: number): string {
   const parsed = parseMonth(month);
+  if (!parsed) return "";
   const date = new Date(Date.UTC(parsed.year, parsed.monthIndex + offset, 1));
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 export function daysInPlanMonth(month: string): number {
   const parsed = parseMonth(month);
+  if (!parsed) return 0;
   return new Date(Date.UTC(parsed.year, parsed.monthIndex + 1, 0)).getUTCDate();
 }
 
-export function buildDefaultSalesPlanMonths(startMonth: string): SalesPlanMonthInput[] {
-  return Array.from({ length: 12 }, (_, index) => ({
-    id: `month-${index + 1}`,
-    month: addMonths(startMonth, index),
-    periodType: "plan" as const,
-    stage: STAGES[index],
-    action: ACTIONS[index],
-    targetDailyUnits: DAILY_UNITS[index],
-    naturalDailyOrders: NATURAL_DAILY_ORDERS[index],
-    unitPrice: 24.99,
-    promotionDiscountRate: PROMOTION_DISCOUNT_RATES[index],
-    promotionOrderShare: PROMOTION_ORDER_SHARES[index],
-    cpo: CPOS[index],
-    cpc: CPCS[index],
-    receipts: RECEIPTS[index],
-    storageCost: 0,
-    couponExpenseRate: 0,
-    dealExpenseRate: 0,
-    vineExpenseRate: 0,
-    actualRefundLoss: null,
-    actualFbaFee: null,
-    actualFirstMileCost: null,
-  }));
+export function createSalesPlanMonth(month: string, index = 0): SalesPlanMonthInput {
+  const patternIndex = Math.min(DEFAULT_STAGES.length - 1, Math.max(0, Math.floor(index)));
+  const stage = DEFAULT_STAGES[patternIndex];
+  const actions = SALES_PLAN_STAGE_ACTIONS[stage] ?? [];
+  const stageOccurrence = DEFAULT_STAGES.slice(0, patternIndex + 1).filter((item) => item === stage).length - 1;
+  return {
+    id: `month-${index + 1}-${month || "unset"}`,
+    month,
+    stage,
+    action: actions[stageOccurrence % Math.max(1, actions.length)] ?? "",
+    targetDailyUnits: DEFAULT_DAILY_UNITS[patternIndex],
+    cpo: DEFAULT_CPOS[patternIndex],
+    cpc: DEFAULT_CPCS[patternIndex],
+    naturalOrderShare: DEFAULT_NATURAL_SHARES[patternIndex],
+    otherVariableCostRateOverride: null,
+  };
+}
+
+export function buildDefaultSalesPlanMonths(startMonth: string, count = 12): SalesPlanMonthInput[] {
+  const safeCount = Math.max(0, Math.floor(Number.isFinite(count) ? count : 0));
+  return Array.from({ length: safeCount }, (_, index) => createSalesPlanMonth(addMonths(startMonth, index), index));
 }
 
 function finiteOrZero(value: number): number {
@@ -203,220 +168,181 @@ function inRateRange(value: number): boolean {
   return Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
+function assumptionsAreValid(assumptions: SalesPlanAssumptions): boolean {
+  const amounts = [assumptions.actualSellingPrice, assumptions.productCostPerUnit, assumptions.storageCostPerUnit, assumptions.fbaFeePerUnit, assumptions.firstMileCostPerUnit, assumptions.averageReturnLoss];
+  return assumptions.actualSellingPrice > 0
+    && amounts.every((value) => Number.isFinite(value) && value >= 0)
+    && inRateRange(assumptions.referralFeeRate)
+    && inRateRange(assumptions.returnRate)
+    && inRateRange(assumptions.otherVariableCostRate);
+}
+
+export function calculateBreakEvenCpo(assumptions: SalesPlanAssumptions): number | null {
+  if (!assumptionsAreValid(assumptions)) return null;
+  const sellingPrice = assumptions.actualSellingPrice;
+  return sellingPrice
+    - assumptions.productCostPerUnit
+    - assumptions.firstMileCostPerUnit
+    - assumptions.fbaFeePerUnit
+    - sellingPrice * assumptions.referralFeeRate
+    - assumptions.storageCostPerUnit
+    - assumptions.returnRate * assumptions.averageReturnLoss
+    - sellingPrice * assumptions.otherVariableCostRate;
+}
+
 function sumKnown(values: Array<number | null>): number {
   return values.reduce<number>((total, value) => total + (value ?? 0), 0);
 }
 
 export function calculateSalesPlan(assumptions: SalesPlanAssumptions, inputs: SalesPlanMonthInput[]): SalesPlanResult {
-  let openingInventory = nonNegative(assumptions.initialInventory);
-  let previousCumulative: number | null = -nonNegative(assumptions.initialInvestment);
+  const validAssumptions = assumptionsAreValid(assumptions);
+  const sellingPrice = nonNegative(assumptions.actualSellingPrice);
+  const referralFeePerUnit = sellingPrice * nonNegative(assumptions.referralFeeRate);
+  const expectedRefundLossPerUnit = nonNegative(assumptions.returnRate) * nonNegative(assumptions.averageReturnLoss);
+  const defaultOtherVariableCostRate = nonNegative(assumptions.otherVariableCostRate);
+  const breakEvenCpo = calculateBreakEvenCpo(assumptions);
+  const monthCounts = inputs.reduce<Map<string, number>>((counts, input) => {
+    if (parseMonth(input.month)) counts.set(input.month, (counts.get(input.month) ?? 0) + 1);
+    return counts;
+  }, new Map());
+  let previousCumulative: number | null = 0;
 
-  const months = inputs.map<SalesPlanMonthResult>((input) => {
+  const months = inputs.map<SalesPlanMonthResult>((input, index) => {
     const warnings: string[] = [];
+    const parsedMonth = parseMonth(input.month);
+    const previousParsedMonth = index > 0 ? parseMonth(inputs[index - 1].month) : null;
     const days = daysInPlanMonth(input.month);
     const targetDailyUnits = nonNegative(input.targetDailyUnits);
-    const naturalDailyOrders = nonNegative(input.naturalDailyOrders);
-    const unitPrice = nonNegative(input.unitPrice);
-    const receipts = nonNegative(input.receipts);
-    const storageCost = nonNegative(input.storageCost);
-    const targetUnits = Math.round(targetDailyUnits * days);
-    const availableInventory = openingInventory + receipts;
-    const actualUnits = Math.min(targetUnits, availableInventory);
-    const stockoutUnits = Math.max(0, targetUnits - actualUnits);
-    const endingInventory = availableInventory - actualUnits;
-
-    const unitsPerOrderValid = Number.isFinite(assumptions.unitsPerOrder) && assumptions.unitsPerOrder > 0;
-    const totalOrders = unitsPerOrderValid ? actualUnits / assumptions.unitsPerOrder : null;
-    const targetOrders = unitsPerOrderValid ? targetUnits / assumptions.unitsPerOrder : null;
-    const plannedNaturalOrders = naturalDailyOrders * days;
-    const naturalOrderShare = targetOrders !== null && targetOrders > 0
-      ? Math.min(1, plannedNaturalOrders / targetOrders)
-      : 0;
-    const naturalOrders = totalOrders !== null ? totalOrders * naturalOrderShare : null;
-    const adOrders = totalOrders !== null && naturalOrders !== null ? totalOrders - naturalOrders : null;
-    const adSpend = adOrders === null ? null : adOrders === 0 ? 0 : input.cpo > 0 ? adOrders * input.cpo : null;
-    const adClicks = adSpend === null ? null : adSpend === 0 ? 0 : input.cpc > 0 ? adSpend / input.cpc : null;
-    const adCvr = adOrders !== null && adOrders > 0 && adClicks !== null && adClicks > 0 ? adOrders / adClicks : null;
-
-    const grossSales = actualUnits * unitPrice;
-    const promotionDiscount = grossSales * nonNegative(input.promotionDiscountRate) * nonNegative(input.promotionOrderShare);
-    const netSalesBeforeRefund = grossSales - promotionDiscount;
-    const averageNetAsp = actualUnits > 0 ? netSalesBeforeRefund / actualUnits : null;
-    const adSales = adOrders !== null && averageNetAsp !== null ? adOrders * assumptions.unitsPerOrder * averageNetAsp : null;
-    const acos = adSpend !== null && adSales !== null && adSales > 0 ? adSpend / adSales : null;
-    const tacos = adSpend !== null && netSalesBeforeRefund > 0 ? adSpend / netSalesBeforeRefund : null;
-
-    const referralFee = netSalesBeforeRefund * nonNegative(assumptions.referralFeeRate);
-    const productAndPackagingCost = actualUnits * (nonNegative(assumptions.productCostPerUnit) + nonNegative(assumptions.packagingCostPerUnit));
-    const fbaCost = input.periodType === "actual" ? input.actualFbaFee : actualUnits * nonNegative(assumptions.budgetFbaPerUnit);
-    const firstMileCost = input.periodType === "actual" ? input.actualFirstMileCost : actualUnits * nonNegative(assumptions.budgetFirstMilePerUnit);
-    const expectedRefundLoss = actualUnits * nonNegative(assumptions.returnRate) * nonNegative(assumptions.averageReturnLoss);
-    const refundLoss = input.periodType === "actual" ? input.actualRefundLoss : expectedRefundLoss;
-
-    const explicitExpenseRate = nonNegative(input.couponExpenseRate) + nonNegative(input.dealExpenseRate) + nonNegative(input.vineExpenseRate);
-    const residualOtherNetExpenseRate = Math.max(0, nonNegative(assumptions.otherNetExpensePoolRate) - explicitExpenseRate);
-    const totalOtherNetExpenseRate = explicitExpenseRate + residualOtherNetExpenseRate;
-    const otherNetExpense = grossSales * totalOtherNetExpenseRate;
-
-    const requiredNumbers = [
-      input.targetDailyUnits,
-      input.naturalDailyOrders,
-      input.unitPrice,
-      input.cpo,
-      input.cpc,
-      input.receipts,
-      input.storageCost,
-    ];
-    const assumptionNumbers = [
-      assumptions.initialInventory,
-      assumptions.productCostPerUnit,
-      assumptions.packagingCostPerUnit,
-      assumptions.budgetFbaPerUnit,
-      assumptions.budgetFirstMilePerUnit,
-      assumptions.averageReturnLoss,
-      assumptions.monthlyFixedOperatingCost,
-      assumptions.initialInvestment,
-    ];
-    const invalidAssumptionRate = !inRateRange(assumptions.referralFeeRate)
-      || !inRateRange(assumptions.returnRate)
-      || !inRateRange(assumptions.otherNetExpensePoolRate);
-    const invalidAssumptionNumber = assumptionNumbers.some((value) => !Number.isFinite(value) || value < 0);
-    const invalidRequiredNumber = requiredNumbers.some((value) => !Number.isFinite(value) || value < 0)
-      || unitPrice <= 0
-      || !inRateRange(input.promotionDiscountRate)
-      || !inRateRange(input.promotionOrderShare)
-      || !inRateRange(input.couponExpenseRate)
-      || !inRateRange(input.dealExpenseRate)
-      || !inRateRange(input.vineExpenseRate)
-      || (input.actualRefundLoss !== null && (!Number.isFinite(input.actualRefundLoss) || input.actualRefundLoss < 0))
-      || (input.actualFbaFee !== null && (!Number.isFinite(input.actualFbaFee) || input.actualFbaFee < 0))
-      || (input.actualFirstMileCost !== null && (!Number.isFinite(input.actualFirstMileCost) || input.actualFirstMileCost < 0));
-
-    if (invalidRequiredNumber) warnings.push("输入超范围");
-    if (invalidAssumptionRate) warnings.push("固定费率需在0%至100%之间");
-    if (invalidAssumptionNumber) warnings.push("固定参数需为非负数");
-    if (!unitsPerOrderValid) warnings.push("UPT需大于0");
-    if (input.periodType === "actual" && input.actualRefundLoss === null) warnings.push("实际月缺退款");
-    if (input.periodType === "actual" && input.actualFbaFee === null) warnings.push("实际月缺FBA");
-    if (input.periodType === "actual" && input.actualFirstMileCost === null) warnings.push("实际月缺头程");
-    if (targetOrders !== null && plannedNaturalOrders > targetOrders) warnings.push("自然单超过目标总单");
-    if (adOrders !== null && adOrders > 0 && input.cpo <= 0) warnings.push("CPO需大于0");
-    if (adOrders !== null && adOrders > 0 && input.cpc <= 0) warnings.push("CPC需大于0");
-    if (adCvr !== null && adCvr > 1) warnings.push("Ad CVR超过100%");
-    if (explicitExpenseRate > assumptions.otherNetExpensePoolRate) warnings.push("费用明细高于默认率");
-    if (stockoutUnits > 0) warnings.push("库存不足");
-
-    const profitInputsAvailable = !invalidRequiredNumber
-      && !invalidAssumptionRate
-      && !invalidAssumptionNumber
-      && unitsPerOrderValid
-      && adSpend !== null
-      && fbaCost !== null
-      && firstMileCost !== null
-      && refundLoss !== null;
-    const profitBeforeAds = profitInputsAvailable
-      ? netSalesBeforeRefund
-        - referralFee
-        - productAndPackagingCost
-        - fbaCost
-        - firstMileCost
-        - storageCost
-        - refundLoss
-        - otherNetExpense
-        - nonNegative(assumptions.monthlyFixedOperatingCost)
+    const monthlyUnits = days > 0 ? targetDailyUnits * days : 0;
+    const naturalOrderShare = inRateRange(input.naturalOrderShare) ? input.naturalOrderShare : 0;
+    const naturalUnits = monthlyUnits * naturalOrderShare;
+    const adUnits = monthlyUnits - naturalUnits;
+    const adSpend = adUnits === 0 ? 0 : input.cpo > 0 && Number.isFinite(input.cpo) ? adUnits * input.cpo : null;
+    const adClicks = adSpend === null ? null : adSpend === 0 ? 0 : input.cpc > 0 && Number.isFinite(input.cpc) ? adSpend / input.cpc : null;
+    const adCvr = adUnits > 0 && adClicks !== null && adClicks > 0 ? adUnits / adClicks : null;
+    const salesRevenue = monthlyUnits * sellingPrice;
+    const adSales = adUnits * sellingPrice;
+    const acos = adSpend !== null && adSales > 0 ? adSpend / adSales : null;
+    const tacos = adSpend !== null && salesRevenue > 0 ? adSpend / salesRevenue : null;
+    const effectiveOtherVariableCostRate = input.otherVariableCostRateOverride ?? defaultOtherVariableCostRate;
+    const otherVariableCostPerUnit = sellingPrice * nonNegative(effectiveOtherVariableCostRate);
+    const storageMultiplier = parsedMonth && parsedMonth.monthIndex >= 9 ? PEAK_STORAGE_MULTIPLIER : 1;
+    const monthlyBreakEvenCpo = validAssumptions && inRateRange(effectiveOtherVariableCostRate)
+      ? sellingPrice - assumptions.productCostPerUnit - assumptions.firstMileCostPerUnit - assumptions.fbaFeePerUnit - referralFeePerUnit - assumptions.storageCostPerUnit * storageMultiplier - expectedRefundLossPerUnit - otherVariableCostPerUnit
       : null;
-    const preAdUnitProfit = profitBeforeAds !== null && actualUnits > 0 ? profitBeforeAds / actualUnits : null;
-    const monthlyProfit = profitBeforeAds !== null && adSpend !== null ? profitBeforeAds - adSpend : null;
-    const profitMargin = monthlyProfit !== null && netSalesBeforeRefund > 0 ? monthlyProfit / netSalesBeforeRefund : null;
-    const cumulativeProfit = previousCumulative !== null && monthlyProfit !== null ? previousCumulative + monthlyProfit : null;
-    const inventoryCoverageDays = targetDailyUnits > 0 ? endingInventory / targetDailyUnits : null;
+    const productCostTotal = monthlyUnits * nonNegative(assumptions.productCostPerUnit);
+    const firstMileCostTotal = monthlyUnits * nonNegative(assumptions.firstMileCostPerUnit);
+    const fbaCostTotal = monthlyUnits * nonNegative(assumptions.fbaFeePerUnit);
+    const referralFeeTotal = monthlyUnits * referralFeePerUnit;
+    const storageCostTotal = monthlyUnits * nonNegative(assumptions.storageCostPerUnit) * storageMultiplier;
+    const expectedRefundLossTotal = monthlyUnits * expectedRefundLossPerUnit;
+    const promotionCostTotal = monthlyUnits * otherVariableCostPerUnit;
+    const duplicateMonth = parsedMonth !== null && (monthCounts.get(input.month) ?? 0) > 1;
+    const outOfOrderMonth = parsedMonth !== null && previousParsedMonth !== null
+      && (parsedMonth.year < previousParsedMonth.year || (parsedMonth.year === previousParsedMonth.year && parsedMonth.monthIndex <= previousParsedMonth.monthIndex));
+    const validInput = parsedMonth !== null
+      && !duplicateMonth
+      && !outOfOrderMonth
+      && Number.isFinite(input.targetDailyUnits) && input.targetDailyUnits >= 0
+      && Number.isFinite(input.cpo) && input.cpo >= 0
+      && Number.isFinite(input.cpc) && input.cpc >= 0
+      && inRateRange(input.naturalOrderShare)
+      && (input.otherVariableCostRateOverride === null || inRateRange(input.otherVariableCostRateOverride));
 
+    if (!parsedMonth) warnings.push("月份未填写或格式无效");
+    if (duplicateMonth) warnings.push("月份重复");
+    if (!duplicateMonth && outOfOrderMonth) warnings.push("月份未按升序排列");
+    if (!validAssumptions) warnings.push("固定参数无效");
+    if (!validInput && parsedMonth && !duplicateMonth) warnings.push("月度输入超范围");
+    if (adUnits > 0 && input.cpo <= 0) warnings.push("CPO需大于0");
+    if (adUnits > 0 && input.cpc <= 0) warnings.push("CPC需大于0");
+    if (adCvr !== null && adCvr > 1) warnings.push("Ad CVR超过100%");
+    if (monthlyBreakEvenCpo !== null && adUnits > 0 && input.cpo > monthlyBreakEvenCpo) warnings.push("CPO高于当月Break-even");
+    if (monthlyBreakEvenCpo !== null && monthlyBreakEvenCpo < 0) warnings.push("单件基础利润为负");
+
+    const metricsAvailable = validAssumptions && validInput && (adUnits === 0 || (adSpend !== null && adClicks !== null));
+    const profitBeforeAds = metricsAvailable
+      ? salesRevenue - productCostTotal - firstMileCostTotal - fbaCostTotal - referralFeeTotal - storageCostTotal - expectedRefundLossTotal - promotionCostTotal
+      : null;
+    const monthlyProfit = profitBeforeAds !== null && adSpend !== null ? profitBeforeAds - adSpend : null;
+    const profitMargin = monthlyProfit !== null && salesRevenue > 0 ? monthlyProfit / salesRevenue : null;
+    const cumulativeProfit = previousCumulative !== null && monthlyProfit !== null ? previousCumulative + monthlyProfit : null;
     if (monthlyProfit !== null && monthlyProfit < 0) warnings.push("月利润为负");
     const status = warnings[0] ?? "正常";
-    const statusSeverity: SalesPlanStatusSeverity = status === "正常"
+    const advisoryWarnings = new Set(["CPO高于当月Break-even", "Ad CVR超过100%", "月份未按升序排列"]);
+    const statusSeverity: SalesPlanStatusSeverity = warnings.length === 0
       ? "ok"
-      : ["费用明细高于默认率", "库存不足"].includes(status)
+      : warnings.every((warning) => advisoryWarnings.has(warning))
         ? "warning"
         : "error";
 
     const result: SalesPlanMonthResult = {
       ...input,
       days,
-      targetUnits,
-      openingInventory,
-      availableInventory,
-      actualUnits,
-      stockoutUnits,
-      endingInventory,
-      totalOrders,
-      plannedNaturalOrders,
-      naturalOrders,
-      adOrders,
+      monthlyUnits,
+      naturalUnits,
+      adUnits,
+      salesRevenue,
       adSpend,
       adClicks,
       adCvr,
-      grossSales,
-      promotionDiscount,
-      netSalesBeforeRefund,
-      averageNetAsp,
       adSales,
       acos,
       tacos,
-      referralFee,
-      productAndPackagingCost,
-      fbaCost,
-      firstMileCost,
-      storageCost,
-      expectedRefundLoss,
-      refundLoss,
-      residualOtherNetExpenseRate,
-      totalOtherNetExpenseRate,
-      otherNetExpense,
+      referralFeePerUnit,
+      expectedRefundLossPerUnit,
+      effectiveOtherVariableCostRate,
+      otherVariableCostPerUnit,
+      breakEvenCpo,
+      monthlyBreakEvenCpo,
+      productCostTotal,
+      firstMileCostTotal,
+      fbaCostTotal,
+      referralFeeTotal,
+      storageMultiplier,
+      storageCostTotal,
+      expectedRefundLossTotal,
+      promotionCostTotal,
       profitBeforeAds,
-      preAdUnitProfit,
       monthlyProfit,
       profitMargin,
       cumulativeProfit,
-      inventoryCoverageDays,
       status,
       statusSeverity,
       warnings,
     };
-
-    openingInventory = endingInventory;
     previousCumulative = cumulativeProfit;
     return result;
   });
 
-  const totalNetSales = months.reduce((total, month) => total + month.netSalesBeforeRefund, 0);
+  const rawTotalUnits = months.reduce((total, month) => total + month.monthlyUnits, 0);
+  const rawTotalRevenue = months.reduce((total, month) => total + month.salesRevenue, 0);
   const adSpendValues = months.map((month) => month.adSpend);
-  const adSalesValues = months.map((month) => month.adSales);
-  const allAdSpendKnown = adSpendValues.every((value) => value !== null);
-  const allAdSalesKnown = adSalesValues.every((value) => value !== null);
-  const totalAdSpend = allAdSpendKnown ? sumKnown(adSpendValues) : null;
-  const totalAdSales = allAdSalesKnown ? sumKnown(adSalesValues) : null;
-  const isComplete = months.every((month) => month.monthlyProfit !== null);
+  const rawTotalAdSpend = adSpendValues.every((value) => value !== null) ? sumKnown(adSpendValues) : null;
+  const totalAdSales = months.reduce((total, month) => total + month.adSales, 0);
+  const isComplete = months.length > 0 && months.every((month) => month.monthlyProfit !== null);
+  const totalUnits = isComplete ? rawTotalUnits : null;
+  const totalRevenue = isComplete ? rawTotalRevenue : null;
+  const totalAdSpend = isComplete ? rawTotalAdSpend : null;
   const operatingProfit = isComplete ? sumKnown(months.map((month) => month.monthlyProfit)) : null;
   const cumulativeValues = months.map((month) => month.cumulativeProfit);
-  const endingCumulativeProfit = isComplete ? cumulativeValues.at(-1) ?? -assumptions.initialInvestment : null;
-  const maximumFundingGap = isComplete
-    ? Math.max(0, -Math.min(-nonNegative(assumptions.initialInvestment), ...cumulativeValues.map((value) => value ?? 0)))
-    : null;
+  const endingCumulativeProfit = isComplete ? cumulativeValues.at(-1) ?? 0 : null;
+  const maximumFundingGap = isComplete ? Math.max(0, -Math.min(0, ...cumulativeValues.map((value) => value ?? 0))) : null;
 
   return {
     months,
     summary: {
-      totalUnits: months.reduce((total, month) => total + month.actualUnits, 0),
-      totalNetSales,
+      totalUnits,
+      totalRevenue,
       totalAdSpend,
       operatingProfit,
       endingCumulativeProfit,
       maximumFundingGap,
-      weightedTacos: totalAdSpend !== null && totalNetSales > 0 ? totalAdSpend / totalNetSales : null,
-      weightedAcos: totalAdSpend !== null && totalAdSales !== null && totalAdSales > 0 ? totalAdSpend / totalAdSales : null,
+      weightedTacos: totalAdSpend !== null && totalRevenue !== null && totalRevenue > 0 ? totalAdSpend / totalRevenue : null,
+      weightedAcos: totalAdSpend !== null && totalAdSales > 0 ? totalAdSpend / totalAdSales : null,
       negativeProfitMonths: months.filter((month) => month.monthlyProfit !== null && month.monthlyProfit < 0).length,
       abnormalMonths: months.filter((month) => month.status !== "正常").length,
-      endingInventory: months.at(-1)?.endingInventory ?? assumptions.initialInventory,
+      breakEvenCpo,
       isComplete,
     },
   };
