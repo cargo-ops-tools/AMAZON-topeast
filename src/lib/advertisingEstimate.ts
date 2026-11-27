@@ -57,33 +57,33 @@ export interface AdvertisingFormulaDefinition {
 export const ADVERTISING_MODEL_FORMULAS: readonly AdvertisingFormulaDefinition[] = [
   {
     id: "click-scale",
-    title: "点击尺度 k",
-    formula: "kᵢ = Cᵢ ÷ Aᵢ；k = P50(kᵢ)",
-    logic: "C 为真实 Clicks，A 为同窗口广告得分；P50 即有效唯一样本的中位数。",
+    title: "点击换算系数 k",
+    formula: "单个样本：kᵢ = 真实广告点击数 Cᵢ ÷ 广告得分 Aᵢ；总体 k 取所有有效 kᵢ 的中位数",
+    logic: "意思是：1 分广告得分大约对应多少次真实广告点击。",
   },
   {
     id: "cpc-scale",
-    title: "CPC 尺度 m",
-    formula: "mᵢ = (Sᵢ ÷ Cᵢ) ÷ bᵢ；m = P50(mᵢ)",
-    logic: "S÷C 为真实 CPC，b 为同范围 CPC 代理；m 用来校正代理值的整体尺度。",
+    title: "单次点击费用换算系数 m",
+    formula: "单个样本：mᵢ =（真实广告花费 Sᵢ ÷ 真实广告点击数 Cᵢ）÷ 费用代理值 bᵢ；总体 m 取所有有效 mᵢ 的中位数",
+    logic: "意思是：费用代理值需要乘以多少，才更接近真实的单次点击费用。",
   },
   {
     id: "order-tendency",
-    title: "订单倾向 λ",
-    formula: "pᵢ = (Ad Ordersᵢ + 0.5) ÷ (Qᵢ + 1)；λᵢ = [pᵢ ÷ (1-pᵢ)] ÷ (Aᵢ ÷ Oᵢ)；λ = P50(λᵢ)",
-    logic: "0.5/1 为 Jeffreys 平滑，用于保留 0% 和 100% 广告订单边界样本。",
+    title: "广告订单倾向系数 λ",
+    formula: "广告订单占比 pᵢ =（广告归因订单数 + 0.5）÷（总订单数 Qᵢ + 1）；单个样本 λᵢ = 广告订单赔率 ÷（广告得分 Aᵢ ÷ 自然得分 Oᵢ）；总体 λ 取所有有效 λᵢ 的中位数",
+    logic: "加 0.5 和 1 是边界修正，用于保留广告订单占比为 0% 或 100% 的真实样本。",
   },
   {
     id: "target-estimate",
     title: "目标竞品估算",
-    formula: "Clicks^ = k × A*；CPC^ = m × b*；Spend^ = Clicks^ × CPC^；p̂_ad = λA* ÷ (λA* + O*)",
+    formula: "预估广告点击数 = k × 竞品广告得分；预估单次点击费用 = m × 竞品费用代理值；预估广告花费 = 预估广告点击数 × 预估单次点击费用；广告归因订单占比 = λ × 广告得分 ÷（λ × 广告得分 + 自然得分）",
     logic: "系统自动校验唯一样本、站点、渠道和窗口天数；日期区间、归因窗口、时区及得分快照需由用户确认一致。",
   },
   {
     id: "safety-line",
     title: "利润安全线",
-    formula: "Break-even ACOS = 广告前单件利润 ÷ 单件售价；Max Safe CPC = Ad CVR × 件/单 × 广告前单件利润",
-    logic: "只有三个核心系数均至少有 10 个唯一样本，且模型质量达到“样本达标”时，才输出最大安全 CPC。",
+    formula: "盈亏平衡广告费率 = 广告前单件利润 ÷ 单件售价；最大安全单次点击费用 = 预估广告转化率 × 平均每单件数 × 广告前单件利润",
+    logic: "只有三个核心系数均至少有 10 个唯一样本，且模型质量达到“样本达标”时，才输出最大安全单次点击费用。",
   },
 ] as const;
 

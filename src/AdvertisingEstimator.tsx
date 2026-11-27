@@ -608,11 +608,11 @@ function AdvertisingEstimator() {
 
         <div className="ad-bottom-grid">
           <section className="ad-panel ad-calibration-panel">
-            <div className="ad-panel-heading"><div><span>04</span><div><h2>校准系数</h2><p>P50（中位数）做点估算，P25–P75 做组合情景边界</p></div></div><BarChart3 size={18} /></div>
+            <div className="ad-panel-heading"><div><span>04</span><div><h2>校准系数</h2><p>中位数用于常规估算，第 25～第 75 百分位用于上下限情景</p></div></div><BarChart3 size={18} /></div>
             <div className="ad-coefficient-list">
-              <div><span>点击尺度 k</span><strong>{formatNumber(result.scales.clickScale, 4)}</strong><small>P50(C ÷ A) · {result.observations.clickScale.length} 个唯一样本</small></div>
-              <div><span>CPC 尺度 m</span><strong>{formatNumber(result.scales.cpcScale, 4)}</strong><small>P50((S ÷ C) ÷ b) · {result.observations.cpcScale.length} 个唯一样本</small></div>
-              <div><span>订单倾向 λ</span><strong>{formatNumber(result.scales.orderTendency, 4)}</strong><small>P50(广告赔率 ÷ A/O) · {result.observations.orderTendency.length} 个唯一样本</small></div>
+              <div><span>点击换算系数 k</span><strong>{formatNumber(result.scales.clickScale, 4)}</strong><small>点击数 C ÷ 广告得分 A 的中位数 · {result.observations.clickScale.length} 个唯一样本</small></div>
+              <div><span>单次点击费用换算系数 m</span><strong>{formatNumber(result.scales.cpcScale, 4)}</strong><small>真实单次点击费用 ÷ 费用代理值 b 的中位数 · {result.observations.cpcScale.length} 个唯一样本</small></div>
+              <div><span>广告订单倾向系数 λ</span><strong>{formatNumber(result.scales.orderTendency, 4)}</strong><small>各样本订单倾向系数的中位数 · {result.observations.orderTendency.length} 个唯一样本</small></div>
             </div>
             <div className="ad-formula-list">
               {ADVERTISING_MODEL_FORMULAS.map((item) => <article key={item.id}><b>{item.title}</b><code>{item.formula}</code><span>{item.logic}</span></article>)}
