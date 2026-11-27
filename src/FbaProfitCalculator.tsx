@@ -246,7 +246,7 @@ function FbaProfitCalculator() {
             <section className="fba-profit__card" aria-labelledby="fba-profit-product-title">
               <div className="fba-profit__card-head">
                 <h2 id="fba-profit-product-title">产品尺寸与重量</h2>
-                <span className="fba-profit__card-code">packaging</span>
+                <span className="fba-profit__card-code" aria-hidden="true">01</span>
               </div>
               <div className="fba-profit__card-body">
                 <div className="fba-profit__section">
@@ -300,7 +300,7 @@ function FbaProfitCalculator() {
             <section className="fba-profit__card" aria-labelledby="fba-profit-cost-title">
               <div className="fba-profit__card-head">
                 <h2 id="fba-profit-cost-title">成本与汇率</h2>
-                <span className="fba-profit__card-code">cost</span>
+                <span className="fba-profit__card-code" aria-hidden="true">02</span>
               </div>
               <div className="fba-profit__card-body">
                 <div className="fba-profit__field-grid fba-profit__field-grid--two">
@@ -326,7 +326,7 @@ function FbaProfitCalculator() {
             <section className="fba-profit__card" aria-labelledby="fba-profit-policy-title">
               <div className="fba-profit__card-head">
                 <h2 id="fba-profit-policy-title">类目与周期假设</h2>
-                <span className="fba-profit__card-code">policy</span>
+                <span className="fba-profit__card-code" aria-hidden="true">03</span>
               </div>
               <div className="fba-profit__card-body">
                 <div className="fba-profit__section">
@@ -355,10 +355,12 @@ function FbaProfitCalculator() {
               </div>
             </section>
 
-            <section className="fba-profit__card" aria-labelledby="fba-profit-freight-title">
+          </div>
+
+          <section className="fba-profit__card fba-profit__card--freight" aria-labelledby="fba-profit-freight-title">
               <div className="fba-profit__card-head">
                 <h2 id="fba-profit-freight-title">头程运费</h2>
-                <span className="fba-profit__card-code">freight</span>
+                <span className="fba-profit__card-code" aria-hidden="true">04</span>
               </div>
               <div className="fba-profit__card-body">
                 <span className="fba-profit__section-label">装箱方法（手动填写三个方向的数量）</span>
@@ -437,8 +439,7 @@ function FbaProfitCalculator() {
                   {result.carton.effectiveWeightLimitKg < 22.68 && `｜当前计划毛重上限 ${fixed(result.carton.effectiveWeightLimitKg, 2)} kg`}
                 </p>
               </div>
-            </section>
-          </div>
+          </section>
 
           <aside className="fba-profit__sticky" aria-label="FBA 利润测算结果" aria-live="polite">
             <section className="fba-profit__card">
