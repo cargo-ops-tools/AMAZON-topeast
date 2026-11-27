@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BadgeDollarSign,
   BarChart3,
+  CalendarRange,
   Check,
   Copy,
   Download,
@@ -43,10 +44,11 @@ import {
   type SellerPromotionType,
 } from "./lib/profit";
 import type { FirstMileTransfer } from "./FirstMileCalculator";
+import SalesPromotionPlan from "./SalesPromotionPlan";
 import { numberInputValue } from "./lib/input";
 import { getDefaultReferralCategory, getReferralFeeCategories, REFERRAL_FEE_SOURCE_URLS } from "./lib/referralFees";
 
-type ProfitTab = "product" | "cost" | "ads" | "promotion" | "simulation" | "dashboard";
+type ProfitTab = "product" | "cost" | "ads" | "promotion" | "simulation" | "sales-plan" | "dashboard";
 
 interface ProfitSimulatorProps {
   firstMileTransfer?: FirstMileTransfer | null;
@@ -338,21 +340,22 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
         </div>
         <div className="profit-top-actions">
           <button className="rule-link" type="button" onClick={() => window.print()}><Printer size={15} /> 打印</button>
-          <button className="rule-link" type="button" onClick={() => exportProfitWorkbook(input)}><FileSpreadsheet size={15} /> 导出 Excel</button>
+          {tab !== "sales-plan" && <button className="rule-link" type="button" onClick={() => exportProfitWorkbook(input)}><FileSpreadsheet size={15} /> 导出 Excel</button>}
         </div>
       </header>
 
       <div className="profit-page">
         <div className="profit-tabs" role="tablist" aria-label="利润测算视图">
-          <button className={tab === "product" ? "active" : ""} type="button" onClick={() => setTab("product")}><Package size={15} /> 产品输入</button>
-          <button className={tab === "cost" ? "active" : ""} type="button" onClick={() => setTab("cost")}><ReceiptText size={15} /> 成本模型</button>
-          <button className={tab === "ads" ? "active" : ""} type="button" onClick={() => setTab("ads")}><Megaphone size={15} /> 广告模型</button>
-          <button className={tab === "promotion" ? "active" : ""} type="button" onClick={() => setTab("promotion")}><Percent size={15} /> 促销模型</button>
-          <button className={tab === "simulation" ? "active" : ""} type="button" onClick={() => setTab("simulation")}><Activity size={15} /> 利润模拟</button>
-          <button className={tab === "dashboard" ? "active" : ""} type="button" onClick={() => setTab("dashboard")}><BarChart3 size={15} /> 利润驾驶舱</button>
+          <button role="tab" aria-selected={tab === "product"} className={tab === "product" ? "active" : ""} type="button" onClick={() => setTab("product")}><Package size={15} /> 产品输入</button>
+          <button role="tab" aria-selected={tab === "cost"} className={tab === "cost" ? "active" : ""} type="button" onClick={() => setTab("cost")}><ReceiptText size={15} /> 成本模型</button>
+          <button role="tab" aria-selected={tab === "ads"} className={tab === "ads" ? "active" : ""} type="button" onClick={() => setTab("ads")}><Megaphone size={15} /> 广告模型</button>
+          <button role="tab" aria-selected={tab === "promotion"} className={tab === "promotion" ? "active" : ""} type="button" onClick={() => setTab("promotion")}><Percent size={15} /> 促销模型</button>
+          <button role="tab" aria-selected={tab === "simulation"} className={tab === "simulation" ? "active" : ""} type="button" onClick={() => setTab("simulation")}><Activity size={15} /> 利润模拟</button>
+          <button role="tab" aria-selected={tab === "sales-plan"} className={tab === "sales-plan" ? "active" : ""} type="button" onClick={() => setTab("sales-plan")}><CalendarRange size={15} /> 销售推广计划</button>
+          <button role="tab" aria-selected={tab === "dashboard"} className={tab === "dashboard" ? "active" : ""} type="button" onClick={() => setTab("dashboard")}><BarChart3 size={15} /> 利润驾驶舱</button>
         </div>
 
-        <section className={`profit-kpi-hero grade-${result.grade}`}>
+        {tab !== "sales-plan" && <section className={`profit-kpi-hero grade-${result.grade}`}>
           <div className="profit-primary-kpi">
             <span>预计月利润</span>
             <strong><sup>{currencySymbol}</sup>{money(result.netProfit)}</strong>
@@ -372,7 +375,11 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
             <button type="button" onClick={copySummary}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? "已复制" : "复制"}</button>
             <button type="button" onClick={() => exportProfitCsv(input)}><Download size={15} /> CSV</button>
           </div>
-        </section>
+        </section>}
+
+        <div role="tabpanel" aria-label="销售推广计划" hidden={tab !== "sales-plan"}>
+          <SalesPromotionPlan />
+        </div>
 
         {tab === "product" && <div className="profit-workspace two-panel">
           <section className="profit-panel">
@@ -533,7 +540,7 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
           </section>
         </div>}
 
-        <div className="warning-list profit-warnings">{result.warnings.map((warning) => <p key={warning}><AlertTriangle size={14} />{warning}</p>)}</div>
+        {tab !== "sales-plan" && <div className="warning-list profit-warnings">{result.warnings.map((warning) => <p key={warning}><AlertTriangle size={14} />{warning}</p>)}</div>}
       </div>
     </main>
   );
