@@ -301,6 +301,21 @@ function AdvertisingEstimator() {
     : result.quality.level === "reference"
       ? "仅供方向参考，不可直接转成预算或出价"
       : "不可直接用于预算、竞品或采购决策";
+  const coreRequirements = [
+    { id: "target-scores", ready: result.readiness.targetScoresReady, label: "竞品广告得分 A* 和自然得分 O* 均大于 0" },
+    { id: "target-cpc", ready: result.readiness.targetCpcReady, label: "竞品单次点击费用代理值 b* 大于 0" },
+    { id: "target-window", ready: result.readiness.targetWindowReady, label: "竞品观察天数 D 大于 0" },
+    { id: "click-sample", ready: result.readiness.clickCalibrationReady, label: `至少 1 个有效点击样本（当前 ${result.quality.sampleCounts.click} 个）` },
+    { id: "cpc-sample", ready: result.readiness.cpcCalibrationReady, label: `至少 1 个有效费用样本（当前 ${result.quality.sampleCounts.cpc} 个）` },
+    { id: "order-sample", ready: result.readiness.orderCalibrationReady, label: `至少 1 个有效订单样本（当前 ${result.quality.sampleCounts.order} 个）` },
+    {
+      id: "context-match",
+      ready: result.validSampleCount > 0 && result.readiness.contextComplete && result.readiness.contextMatches && result.readiness.observationWindowMatches,
+      label: "竞品与校准样本的站点、渠道和观察天数一致",
+    },
+    { id: "scope-verified", ready: result.readiness.scopeVerified, label: "已确认日期区间、归因窗口、时区、币种及得分快照口径" },
+  ];
+  const missingCoreRequirements = coreRequirements.filter((item) => !item.ready);
 
   useEffect(() => {
     try {
@@ -330,18 +345,7 @@ function AdvertisingEstimator() {
     setCalibrationScopeVerified(false);
     setSamples((current) => current.length > 1 ? current.filter((sample) => sample.id !== id) : current);
   };
-  const loadDemo = () => {
-    setSamples([{ ...DEMO_SAMPLE, id: newSampleId() }]);
-    setTarget(DEMO_TARGET);
-    setSite("Amazon US");
-    setChannelScope("Sponsored Products · Keyword");
-    setCalibrationSite("Amazon US");
-    setCalibrationChannelScope("Sponsored Products · Keyword");
-    setCalibrationScopeVerified(true);
-    setSelectedTemplateId("");
-    setIsDemo(true);
-  };
-  const clearAll = () => {
+  const loadBlankPreset = (message = "已载入默认空白样板") => {
     setSamples([{ ...EMPTY_SAMPLE, id: newSampleId() }]);
     setTarget({ ...EMPTY_TARGET });
     setSite("Amazon US");
@@ -350,8 +354,25 @@ function AdvertisingEstimator() {
     setCalibrationChannelScope("Sponsored Products · Keyword");
     setCalibrationScopeVerified(false);
     setSelectedTemplateId("");
+    setTemplateName("我的广告测算样板");
     setIsDemo(false);
-    setFeedback("");
+    setFeedback(message);
+  };
+  const loadDemo = () => {
+    setSamples([{ ...DEMO_SAMPLE, id: newSampleId() }]);
+    setTarget({ ...DEMO_TARGET });
+    setSite("Amazon US");
+    setChannelScope("Sponsored Products · Keyword");
+    setCalibrationSite("Amazon US");
+    setCalibrationChannelScope("Sponsored Products · Keyword");
+    setCalibrationScopeVerified(true);
+    setSelectedTemplateId("");
+    setTemplateName("演示样板（不可用于决策）");
+    setIsDemo(true);
+    setFeedback("已载入演示样板；请勿直接用于业务决策");
+  };
+  const clearAll = () => {
+    loadBlankPreset("");
   };
 
   const saveTemplate = () => {
@@ -372,7 +393,7 @@ function AdvertisingEstimator() {
     setSavedTemplates((current) => [...current.filter((item) => item.id !== id), nextTemplate]);
     setSelectedTemplateId(id);
     setTemplateName(nextTemplate.name);
-    setFeedback("样板已保存在当前浏览器");
+    setFeedback(isDemo ? "演示样板已保存；仍不可用于业务决策" : `输入草稿已保存${missingCoreRequirements.length > 0 ? `；仍缺 ${missingCoreRequirements.length} 项` : ""}`);
     window.setTimeout(() => setFeedback(""), 1800);
   };
 
@@ -392,6 +413,7 @@ function AdvertisingEstimator() {
     setCalibrationChannelScope(template.calibrationChannelScope);
     setCalibrationScopeVerified(template.calibrationScopeVerified);
     setIsDemo(template.isDemo);
+    setFeedback(template.isDemo ? "已载入演示样板；仍不可用于业务决策" : "已载入我的输入样板");
   };
 
   const deleteTemplate = () => {
@@ -404,7 +426,7 @@ function AdvertisingEstimator() {
 
   const copyResult = async () => {
     const text = [
-      "【广告测算】",
+      isDemo ? "【广告测算｜演示数据，不可用于决策】" : "【广告测算】",
       `竞品站点/渠道：${site} / ${channelScope}`,
       `校准样本站点/渠道：${calibrationSite} / ${calibrationChannelScope}（${calibrationScopeVerified ? "已确认" : "未确认"}）`,
       `竞品：${target.asin || "未填写"}`,
@@ -461,7 +483,7 @@ function AdvertisingEstimator() {
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `advertising-estimate-${target.asin.trim() || "result"}.csv`;
+    link.download = `${isDemo ? "DEMO-" : ""}advertising-estimate-${target.asin.trim() || "result"}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -475,8 +497,8 @@ function AdvertisingEstimator() {
           <p>用授权样本校准西柚得分，估算竞品广告花费、CPC 与广告归因订单比例</p>
         </div>
         <div className="ad-top-actions">
-          <button className="rule-link" type="button" onClick={loadDemo}><Calculator size={15} /> 文档示例</button>
-          <button className="rule-link" type="button" onClick={clearAll}><RotateCcw size={15} /> 清空输入</button>
+          <button className="rule-link" type="button" onClick={loadDemo}><Calculator size={15} /> 载入演示样板</button>
+          <button className="rule-link" type="button" onClick={clearAll}><RotateCcw size={15} /> 恢复默认空白样板</button>
         </div>
       </header>
 
@@ -496,12 +518,20 @@ function AdvertisingEstimator() {
 
         {isDemo && <div className="ad-demo-banner" role="status"><AlertTriangle size={17} /><strong>当前包含演示数据</strong><span>即使局部修改，仍不可直接用于预算、竞品判断或采购决策。请清空并替换为同站点、同渠道、同窗口的真实校准数据。</span></div>}
 
+        <section className="ad-template-bar ad-default-template-bar" aria-label="系统默认样板">
+          <div className="ad-template-title"><Calculator size={16} /><div><strong>系统默认样板</strong><span>Amazon US · SP 关键词 · 30 天 · 1 件/单；不包含任何业务数据</span></div></div>
+          <div className="ad-system-template-actions">
+            <button className="ad-secondary-button" type="button" onClick={() => loadBlankPreset()}><RotateCcw size={15} /> 载入默认空白样板</button>
+            <button className="ad-secondary-button" type="button" onClick={loadDemo}><Calculator size={15} /> 载入演示样板</button>
+          </div>
+        </section>
+
         <section className="ad-template-bar" aria-label="广告测算样板">
           <div className="ad-template-title"><Bookmark size={16} /><div><strong>我的输入样板</strong><span>保存在当前浏览器，可随时恢复</span></div></div>
           <div className="ad-template-controls">
             <label><span className="sr-only">样板名称</span><input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="输入样板名称" /></label>
             <button className="ad-secondary-button" type="button" onClick={saveTemplate}><Save size={15} /> 保存样板</button>
-            <label className="ad-template-select"><span className="sr-only">选择已保存样板</span><select value={selectedTemplateId} onChange={(event) => loadTemplate(event.target.value)}><option value="">选择已保存样板</option>{savedTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label>
+            <label className="ad-template-select"><span className="sr-only">选择已保存样板</span><select value={selectedTemplateId} onChange={(event) => loadTemplate(event.target.value)}><option value="">选择已保存样板</option>{savedTemplates.map((template) => <option key={template.id} value={template.id}>{template.isDemo ? `【演示】${template.name}` : template.name}</option>)}</select></label>
             <button className="icon-button" type="button" onClick={deleteTemplate} disabled={!selectedTemplateId} title="删除已选样板" aria-label="删除已选样板"><Trash2 size={15} /></button>
             <span className="ad-template-feedback" aria-live="polite">{feedback}</span>
           </div>
@@ -515,17 +545,17 @@ function AdvertisingEstimator() {
             </div>
             <div className="ad-form">
               <div className="ad-form-grid two">
-                <label className="ad-field"><span>竞品站点</span><select value={site} onChange={(event) => setSite(event.target.value)}><option>Amazon US</option><option>Amazon CA</option><option>Amazon UK</option><option>Amazon DE</option><option>其他站点</option></select></label>
-                <label className="ad-field"><span>竞品渠道</span><select value={channelScope} onChange={(event) => setChannelScope(event.target.value)}><option>Sponsored Products · Keyword</option><option>Sponsored Products · Product Targeting</option><option>Sponsored Brands</option><option>Sponsored Display</option><option>混合渠道（仅同口径）</option><option value="SP CPC">SP CPC（旧样板）</option>{!["Sponsored Products · Keyword", "Sponsored Products · Product Targeting", "Sponsored Brands", "Sponsored Display", "混合渠道（仅同口径）", "SP CPC"].includes(channelScope) && <option value={channelScope}>{channelScope}（旧样板）</option>}</select></label>
+                <label className="ad-field"><span>竞品站点</span><select value={site} onChange={(event) => { setSite(event.target.value); setCalibrationScopeVerified(false); }}><option>Amazon US</option><option>Amazon CA</option><option>Amazon UK</option><option>Amazon DE</option><option>其他站点</option></select></label>
+                <label className="ad-field"><span>竞品渠道</span><select value={channelScope} onChange={(event) => { setChannelScope(event.target.value); setCalibrationScopeVerified(false); }}><option>Sponsored Products · Keyword</option><option>Sponsored Products · Product Targeting</option><option>Sponsored Brands</option><option>Sponsored Display</option><option>混合渠道（仅同口径）</option><option value="SP CPC">SP CPC（旧样板）</option>{!["Sponsored Products · Keyword", "Sponsored Products · Product Targeting", "Sponsored Brands", "Sponsored Display", "混合渠道（仅同口径）", "SP CPC"].includes(channelScope) && <option value={channelScope}>{channelScope}（旧样板）</option>}</select></label>
               </div>
               <label className="ad-field"><span>竞品 ASIN 或备注</span><input value={target.asin} onChange={(event) => updateTarget("asin", event.target.value)} placeholder="例如：B0XXXXXXX" /></label>
               <div className="ad-form-grid two">
-                <label className="ad-field"><span>竞品广告得分 A*</span><input type="number" min="0" step="1" value={target.adScore || ""} onChange={(event) => updateTarget("adScore", numericValue(event.target.value))} /><small>西柚广告流量得分</small></label>
-                <label className="ad-field"><span>竞品自然得分 O*</span><input type="number" min="0" step="1" value={target.organicScore || ""} onChange={(event) => updateTarget("organicScore", numericValue(event.target.value))} /><small>必须与 A* 同口径</small></label>
+                <label className="ad-field"><span>竞品广告得分 A* <em className="ad-required-badge">核心必填</em></span><input type="number" min="0" step="1" value={target.adScore || ""} onChange={(event) => updateTarget("adScore", numericValue(event.target.value))} /><small>西柚广告流量得分，必须大于 0</small></label>
+                <label className="ad-field"><span>竞品自然得分 O* <em className="ad-required-badge">核心必填</em></span><input type="number" min="0" step="1" value={target.organicScore || ""} onChange={(event) => updateTarget("organicScore", numericValue(event.target.value))} /><small>必须与 A* 同口径且大于 0</small></label>
               </div>
               <div className="ad-form-grid two">
-                <label className="ad-field"><span>竞品 CPC 代理 b*</span><div className="ad-input-prefix"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={target.cpcProxy || ""} onChange={(event) => updateTarget("cpcProxy", numericValue(event.target.value))} /></div><small>来自同范围关键词篮子</small></label>
-                <label className="ad-field"><span>有效观察天数 D</span><input type="number" min="1" step="1" value={target.observationDays || ""} onChange={(event) => updateTarget("observationDays", numericValue(event.target.value))} /><small>必须与全部校准样本一致，否则阻断总量结果</small></label>
+                <label className="ad-field"><span>竞品 CPC 代理 b* <em className="ad-required-badge">核心必填</em></span><div className="ad-input-prefix"><b>{currency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={target.cpcProxy || ""} onChange={(event) => updateTarget("cpcProxy", numericValue(event.target.value))} /></div><small>来自同范围关键词篮子，必须大于 0</small></label>
+                <label className="ad-field"><span>有效观察天数 D <em className="ad-required-badge">核心必填</em></span><input type="number" min="1" step="1" value={target.observationDays || ""} onChange={(event) => updateTarget("observationDays", numericValue(event.target.value))} /><small>必须与全部校准样本一致，否则阻断总量结果</small></label>
               </div>
               <div className="ad-form-grid two">
                 <label className="ad-field"><span>竞品同口径总订单 Q <em>可选</em></span><input type="number" min="0" step="1" value={target.totalOrders ?? ""} onChange={(event) => updateTarget("totalOrders", optionalNumericValue(event.target.value))} placeholder="没有可靠 Q 时留空" /><small>用于广告单数、CVR 与 TACoS</small></label>
@@ -544,6 +574,18 @@ function AdvertisingEstimator() {
               <div className="ad-result-actions">
                 <button className="ad-secondary-button" type="button" onClick={copyResult} disabled={result.target.estimatedSpend === null}>{copied ? <Check size={16} /> : <Clipboard size={16} />}{copied ? "已复制" : "复制"}</button>
                 <button className="ad-secondary-button" type="button" onClick={exportCsv} disabled={result.target.estimatedSpend === null}><Download size={16} /> CSV</button>
+              </div>
+            </div>
+            <div className={`ad-readiness-panel ${result.readiness.coreReady ? "ready" : "incomplete"}`}>
+              <div className="ad-readiness-heading">
+                <div>
+                  <strong>{result.readiness.coreReady ? "核心测算条件已齐备" : `结果暂未生成：还缺 ${missingCoreRequirements.length} 项`}</strong>
+                  <span>{result.readiness.coreReady ? "基础花费和订单占比已经可以计算，是否可用于决策仍需看模型质量。" : "下面直接列出“—”的原因；逐项补齐后会自动出结果。"}</span>
+                </div>
+                <b>{coreRequirements.length - missingCoreRequirements.length}/{coreRequirements.length}</b>
+              </div>
+              <div className="ad-readiness-list">
+                {coreRequirements.map((item) => <div className={item.ready ? "ready" : "missing"} key={item.id}>{item.ready ? <Check size={14} /> : <AlertTriangle size={14} />}<span>{item.label}</span></div>)}
               </div>
             </div>
             <div className="ad-result-grid">
@@ -582,22 +624,28 @@ function AdvertisingEstimator() {
               <label className="ad-field"><span>校准样本站点</span><select value={calibrationSite} onChange={(event) => { setCalibrationSite(event.target.value); setCalibrationScopeVerified(false); }}><option>Amazon US</option><option>Amazon CA</option><option>Amazon UK</option><option>Amazon DE</option><option>其他站点</option>{!["Amazon US", "Amazon CA", "Amazon UK", "Amazon DE", "其他站点"].includes(calibrationSite) && <option value={calibrationSite}>{calibrationSite}（旧样板）</option>}</select></label>
               <label className="ad-field"><span>校准样本渠道</span><select value={calibrationChannelScope} onChange={(event) => { setCalibrationChannelScope(event.target.value); setCalibrationScopeVerified(false); }}><option>Sponsored Products · Keyword</option><option>Sponsored Products · Product Targeting</option><option>Sponsored Brands</option><option>Sponsored Display</option><option>混合渠道（仅同口径）</option><option value="SP CPC">SP CPC（旧样板）</option>{!["Sponsored Products · Keyword", "Sponsored Products · Product Targeting", "Sponsored Brands", "Sponsored Display", "混合渠道（仅同口径）", "SP CPC"].includes(calibrationChannelScope) && <option value={calibrationChannelScope}>{calibrationChannelScope}（旧样板）</option>}</select></label>
             </div>
-            <label className="ad-scope-confirm"><input type="checkbox" checked={calibrationScopeVerified} onChange={(event) => setCalibrationScopeVerified(event.target.checked)} /><span>我确认整组样本彼此、并与目标竞品采用同一日期区间、归因窗口、报表时区、币种及得分快照口径；系统不会自动换币种或重标旧数据。修改样本或目标核心输入后需重新确认。</span></label>
+            <label className="ad-scope-confirm"><input type="checkbox" checked={calibrationScopeVerified} onChange={(event) => setCalibrationScopeVerified(event.target.checked)} /><span><b>核心必填：</b>我确认整组样本彼此、并与目标竞品采用同一日期区间、归因窗口、报表时区、币种及得分快照口径；系统不会自动换币种或重标旧数据。修改样本或目标核心输入后需重新确认。</span></label>
+          </div>
+          <div className="ad-sample-requirements" aria-label="校准样本必填说明">
+            <div><strong>点击样本</strong><span>编号 + 天数 + 广告得分 A + 真实点击 C</span></div>
+            <div><strong>费用样本</strong><span>编号 + 天数 + C＞0 + 真实花费 S + 代理值 b</span></div>
+            <div><strong>订单样本</strong><span>编号 + 天数 + A + O + 总订单 Q + 广告归因订单</span></div>
+            <p>三类样本可以来自不同 ASIN；未知数据请留空，只有报表明确为 0 时才填 0。</p>
           </div>
           <div className="ad-table-wrap">
             <table className="ad-sample-table">
-              <thead><tr><th>样本 ASIN / 唯一编号</th><th>窗口天数</th><th>广告得分 A</th><th>自然得分 O</th><th>真实广告点击 C</th><th>真实花费 S</th><th>CPC 代理 b</th><th>总订单 Q</th><th>广告归因订单</th><th>操作</th></tr></thead>
+              <thead><tr><th>样本 ASIN / 唯一编号 <em>每行必填</em></th><th>窗口天数 <em>每行必填</em></th><th>广告得分 A <small>点击/订单</small></th><th>自然得分 O <small>订单</small></th><th>真实广告点击 C <small>点击/费用</small></th><th>真实花费 S <small>费用</small></th><th>CPC 代理 b <small>费用</small></th><th>总订单 Q <small>订单</small></th><th>广告归因订单 <small>订单</small></th><th>操作</th></tr></thead>
               <tbody>
                 {samples.length === 0 ? <tr><td colSpan={10} className="ad-empty-row">暂无校准样本，请增加样本或载入文档示例。</td></tr> : samples.map((sample) => <tr key={sample.id}>
                   <td data-label="样本 ASIN / 编号"><input className="ad-sample-name" value={sample.asin} onChange={(event) => updateSample(sample.id, "asin", event.target.value.toUpperCase())} placeholder="必填，用于去重" /></td>
-                  <td data-label="窗口天数"><input type="number" min="1" step="1" value={sample.observationDays || ""} onChange={(event) => updateSample(sample.id, "observationDays", numericValue(event.target.value))} /></td>
-                  <td data-label="广告得分 A"><input type="number" min="0" step="1" value={sample.adScore || ""} onChange={(event) => updateSample(sample.id, "adScore", numericValue(event.target.value))} /></td>
-                  <td data-label="自然得分 O"><input type="number" min="0" step="1" value={sample.organicScore || ""} onChange={(event) => updateSample(sample.id, "organicScore", numericValue(event.target.value))} /></td>
+                  <td data-label="窗口天数"><input type="number" min="1" step="1" value={sample.observationDays || ""} onChange={(event) => updateSample(sample.id, "observationDays", numericValue(event.target.value))} placeholder="大于 0" /></td>
+                  <td data-label="广告得分 A"><input type="number" min="0" step="1" value={sample.adScore || ""} onChange={(event) => updateSample(sample.id, "adScore", numericValue(event.target.value))} placeholder="大于 0" /></td>
+                  <td data-label="自然得分 O"><input type="number" min="0" step="1" value={sample.organicScore || ""} onChange={(event) => updateSample(sample.id, "organicScore", numericValue(event.target.value))} placeholder="大于 0" /></td>
                   <td data-label="真实广告点击 C"><input type="number" min="0" step="1" value={sample.adClicks ?? ""} onChange={(event) => updateSample(sample.id, "adClicks", optionalNumericValue(event.target.value))} placeholder="零点击填 0" /></td>
-                  <td data-label="真实花费 S"><div className="ad-table-money"><b>{calibrationCurrency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.adSpend || ""} onChange={(event) => updateSample(sample.id, "adSpend", numericValue(event.target.value))} /></div></td>
-                  <td data-label="CPC 代理 b"><div className="ad-table-money"><b>{calibrationCurrency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.cpcProxy || ""} onChange={(event) => updateSample(sample.id, "cpcProxy", numericValue(event.target.value))} /></div></td>
-                  <td data-label="总订单 Q"><input type="number" min="0" step="1" value={sample.totalOrders || ""} onChange={(event) => updateSample(sample.id, "totalOrders", numericValue(event.target.value))} /></td>
-                  <td data-label="广告归因订单"><input type="number" min="0" step="1" value={sample.adOrders ?? ""} onChange={(event) => updateSample(sample.id, "adOrders", optionalNumericValue(event.target.value))} placeholder="留空则不参与订单校准" /></td>
+                  <td data-label="真实花费 S"><div className="ad-table-money"><b>{calibrationCurrency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.adSpend || ""} onChange={(event) => updateSample(sample.id, "adSpend", numericValue(event.target.value))} placeholder="大于 0" /></div></td>
+                  <td data-label="CPC 代理 b"><div className="ad-table-money"><b>{calibrationCurrency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.cpcProxy || ""} onChange={(event) => updateSample(sample.id, "cpcProxy", numericValue(event.target.value))} placeholder="大于 0" /></div></td>
+                  <td data-label="总订单 Q"><input type="number" min="0" step="1" value={sample.totalOrders || ""} onChange={(event) => updateSample(sample.id, "totalOrders", numericValue(event.target.value))} placeholder="大于 0" /></td>
+                  <td data-label="广告归因订单"><input type="number" min="0" step="1" value={sample.adOrders ?? ""} onChange={(event) => updateSample(sample.id, "adOrders", optionalNumericValue(event.target.value))} placeholder="0 到总订单 Q" /></td>
                   <td data-label="操作"><button className="icon-button" type="button" onClick={() => removeSample(sample.id)} title="删除样本" aria-label={`删除${sample.asin || sample.name}`}><Trash2 size={15} /></button></td>
                 </tr>)}
               </tbody>

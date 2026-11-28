@@ -119,6 +119,19 @@ export interface AdvertisingEstimate {
     missingIdentityCount: number;
     dispersion: { click: number | null; cpc: number | null; order: number | null };
   };
+  readiness: {
+    targetScoresReady: boolean;
+    targetCpcReady: boolean;
+    targetWindowReady: boolean;
+    clickCalibrationReady: boolean;
+    cpcCalibrationReady: boolean;
+    orderCalibrationReady: boolean;
+    contextComplete: boolean;
+    contextMatches: boolean;
+    scopeVerified: boolean;
+    observationWindowMatches: boolean;
+    coreReady: boolean;
+  };
   target: {
     trafficShare: number | null;
     estimatedClicks: number | null;
@@ -355,11 +368,11 @@ export function calculateAdvertisingEstimate(
     context.targetSite.trim() && context.targetChannelScope.trim()
     && context.calibrationSite.trim() && context.calibrationChannelScope.trim()
   );
+  const contextMatches = contextComplete
+    && sameContextValue(context.targetSite, context.calibrationSite)
+    && sameContextValue(context.targetChannelScope, context.calibrationChannelScope);
   const hasUnverifiedContext = hasRelevantSamples && (!context.calibrationScopeVerified || !contextComplete);
-  const hasContextMismatch = hasRelevantSamples && contextComplete && (
-    !sameContextValue(context.targetSite, context.calibrationSite)
-    || !sameContextValue(context.targetChannelScope, context.calibrationChannelScope)
-  );
+  const hasContextMismatch = hasRelevantSamples && contextComplete && !contextMatches;
   const isDecisionBlocked = hasObservationWindowMismatch || hasUnverifiedContext || hasContextMismatch;
   const scopeReady = !hasUnverifiedContext && !hasContextMismatch;
   const targetWindowReady = finite(target.observationDays) && target.observationDays > 0;
@@ -448,6 +461,11 @@ export function calculateAdvertisingEstimate(
   const targetCoreReady = targetHasPositiveTraffic
     && finite(target.cpcProxy) && target.cpcProxy > 0
     && finite(target.observationDays) && target.observationDays > 0;
+  const coreReady = minimumSampleCount > 0
+    && targetCoreReady
+    && contextMatches
+    && context.calibrationScopeVerified
+    && !hasObservationWindowMismatch;
   let qualityLevel: AdvertisingQualityLevel;
   if (isDecisionBlocked) qualityLevel = "blocked";
   else if (minimumSampleCount === 0 || !targetCoreReady) qualityLevel = "unavailable";
@@ -520,6 +538,19 @@ export function calculateAdvertisingEstimate(
       suspiciousCloneSampleIds: prepared.suspiciousCloneSampleIds,
       missingIdentityCount: prepared.missingIdentityCount,
       dispersion,
+    },
+    readiness: {
+      targetScoresReady: targetHasPositiveTraffic,
+      targetCpcReady: finite(target.cpcProxy) && target.cpcProxy > 0,
+      targetWindowReady,
+      clickCalibrationReady: clickObservations.length > 0,
+      cpcCalibrationReady: cpcObservations.length > 0,
+      orderCalibrationReady: orderObservations.length > 0,
+      contextComplete,
+      contextMatches,
+      scopeVerified: context.calibrationScopeVerified,
+      observationWindowMatches: !hasObservationWindowMismatch,
+      coreReady,
     },
     target: {
       trafficShare,

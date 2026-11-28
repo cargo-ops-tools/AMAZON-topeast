@@ -90,6 +90,54 @@ describe("calculateAdvertisingEstimate", () => {
     expect(result.target.maxSafeCpc).toBeNull();
     expect(result.target.profitAfterAds).toBeCloseTo(-1416, 10);
     expect(result.target.profitMarginAfterAds).toBeCloseTo(-0.1011428571, 10);
+    expect(result.readiness).toMatchObject({
+      targetScoresReady: true,
+      targetCpcReady: true,
+      targetWindowReady: true,
+      clickCalibrationReady: true,
+      cpcCalibrationReady: true,
+      orderCalibrationReady: true,
+      contextComplete: true,
+      contextMatches: true,
+      scopeVerified: true,
+      observationWindowMatches: true,
+      coreReady: true,
+    });
+  });
+
+  it("reports exactly which core inputs are still missing", () => {
+    const result = calculateAdvertisingEstimate([{
+      ...sample,
+      asin: "",
+      adScore: 0,
+      organicScore: 0,
+      adClicks: null,
+      adSpend: 0,
+      cpcProxy: 0,
+      totalOrders: 0,
+      adOrders: null,
+    }], {
+      ...target,
+      adScore: 0,
+      organicScore: 0,
+      cpcProxy: 0,
+    }, { ...verifiedContext, calibrationScopeVerified: false });
+
+    expect(result.readiness).toMatchObject({
+      targetScoresReady: false,
+      targetCpcReady: false,
+      targetWindowReady: true,
+      clickCalibrationReady: false,
+      cpcCalibrationReady: false,
+      orderCalibrationReady: false,
+      contextComplete: true,
+      contextMatches: true,
+      scopeVerified: false,
+      observationWindowMatches: true,
+      coreReady: false,
+    });
+    expect(result.quality.missingIdentityCount).toBe(0);
+    expect(result.target.estimatedSpend).toBeNull();
   });
 
   it("uses Jeffreys smoothing and retains zero/all-ad boundary samples", () => {
@@ -108,6 +156,7 @@ describe("calculateAdvertisingEstimate", () => {
     const result = calculateAdvertisingEstimate([{ ...sample, adOrders: null }], target);
 
     expect(result.quality.sampleCounts).toEqual({ click: 1, cpc: 1, order: 0 });
+    expect(result.readiness).toMatchObject({ clickCalibrationReady: true, cpcCalibrationReady: true, orderCalibrationReady: false, coreReady: false });
     expect(result.scales.orderTendency).toBeNull();
     expect(result.quality.level).toBe("unavailable");
     expect(result.target.estimatedSpend).toBeNull();
