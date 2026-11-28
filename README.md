@@ -6,6 +6,7 @@
 
 - FBA 利润测算（2026 US Size Tier、配送费、仓储费、入库配置费、头程与单件利润一体化）
 - FBA 库存成本推演
+- 产品图生成（Billfish 原款与参考图、文生图、拆款、换色换料、结构修改和方案评审）
 - 亚马逊利润测算器（运营版）
 - 销售推广计划（可增减月份，滚动推演销量、广告、成本、月利润与资金缺口，支持导出含固定参数与公式的 Excel）
 - 链接经营评分（六维 100 分、S/A/B/C 链接规划 + Review/Rating 情景推演）
@@ -69,11 +70,18 @@ Amazon 未公开完整 Rating 权重。前台总 Rating 可能已经包含文字
 ## 可分享入口
 
 - FBA 利润测算：`#/fba`
+- 产品图生成：`#/product-images`
 - 销售推广计划：`#/sales-plan`
 - 广告测算：`#/advertising-estimator`
 - 链接经营评分：`#/review-score`
 
 模块状态写入 URL Hash，刷新、浏览器前进/后退和分享链接时可保留当前工具入口。旧的 `#/packing` 与 `#/first-mile` 链接会自动转到 `#/fba`。
+
+### 产品图生成
+
+从 Billfish 拖入原款和可选参考图，输入设计要求，复制提示词并在 ChatGPT 附图。将结果导回网页即可比较、选定、继续改款并导出。图片、候选版本和评审意见保存在当前浏览器的 IndexedDB。
+
+需要在网页内调用 OpenAI 时，从模块的「连接本机 API」下载 `topeast-image-bridge.cjs`。在本机终端执行 `node topeast-image-bridge.cjs`（Node.js 20+），输入 API Key，回到网页填写终端显示的配对码。也可以在本机设置 `OPENAI_API_KEY`。服务监听 `127.0.0.1:18746`，仅接受来自该 GitHub Pages 站点并带有配对码的生成请求。关闭终端即结束服务。
 
 ## 本地运行
 
