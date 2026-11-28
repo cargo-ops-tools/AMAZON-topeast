@@ -3,6 +3,7 @@ import { BarChart3, CalendarRange, FileSpreadsheet, Info, Plus, RotateCcw, Slide
 import NumberInput from "./NumberInput";
 import { DEFAULT_SALES_PLAN_ASSUMPTIONS, SALES_PLAN_STAGE_ACTIONS, addMonths, buildDefaultSalesPlanMonths, calculateSalesPlan, createSalesPlanMonth } from "./lib/salesPlan";
 import { downloadSalesPlanWorkbook } from "./lib/salesPlanWorkbook";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 
 type SalesPlanAssumptions = typeof DEFAULT_SALES_PLAN_ASSUMPTIONS;
 type SalesPlanMonthInput = ReturnType<typeof buildDefaultSalesPlanMonths>[number];
@@ -10,10 +11,41 @@ type SalesPlanMonthResult = ReturnType<typeof calculateSalesPlan>["months"][numb
 
 const STAGES = Object.keys(SALES_PLAN_STAGE_ACTIONS);
 const ALL_STAGE_ACTIONS = new Set(Object.values(SALES_PLAN_STAGE_ACTIONS).flat());
+const EMPTY_SALES_PLAN_ASSUMPTIONS: SalesPlanAssumptions = {
+  productName: "",
+  productId: "",
+  currency: "USD",
+  actualSellingPrice: 0,
+  productCostPerUnit: 0,
+  storageCostPerUnit: 0,
+  fbaFeePerUnit: 0,
+  firstMileCostPerUnit: 0,
+  referralFeeRate: 0,
+  returnRate: 0,
+  averageReturnLoss: 0,
+  otherVariableCostRate: 0,
+};
 
 function currentMonth(): string {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function createBlankSalesPlanMonth(month: string, id: string): SalesPlanMonthInput {
+  return {
+    ...createSalesPlanMonth(month, 0),
+    id,
+    action: "",
+    targetDailyUnits: 0,
+    cpo: 0,
+    cpc: 0,
+    naturalOrderShare: 0,
+    otherVariableCostRateOverride: null,
+  };
+}
+
+function buildBlankSalesPlanMonths(startMonth: string): SalesPlanMonthInput[] {
+  return [createBlankSalesPlanMonth(startMonth, `blank-${startMonth}`)];
 }
 
 function numberValue(raw: string): number {
@@ -94,9 +126,10 @@ function Kpi({ label, value, note, tone = "" }: { label: string; value: ReactNod
 
 function SalesPromotionPlan() {
   const defaultStartMonth = useMemo(currentMonth, []);
-  const [assumptions, setAssumptions] = useState<SalesPlanAssumptions>(() => ({ ...DEFAULT_SALES_PLAN_ASSUMPTIONS }));
-  const [months, setMonths] = useState<SalesPlanMonthInput[]>(() => buildDefaultSalesPlanMonths(defaultStartMonth, 12));
+  const [assumptions, setAssumptions] = useState<SalesPlanAssumptions>(() => ({ ...EMPTY_SALES_PLAN_ASSUMPTIONS }));
+  const [months, setMonths] = useState<SalesPlanMonthInput[]>(() => buildBlankSalesPlanMonths(defaultStartMonth));
   const [showCostDetails, setShowCostDetails] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const result = useMemo(() => calculateSalesPlan(assumptions, months), [assumptions, months]);
   const { summary } = result;
   const currency = assumptions.currency || "USD";
@@ -124,22 +157,35 @@ function SalesPromotionPlan() {
   const addMonth = () => {
     const latestMonth = months.map((month) => month.month).filter((month) => /^\d{4}-\d{2}$/.test(month)).sort().at(-1);
     const nextMonth = latestMonth ? addMonths(latestMonth, 1) : currentMonth();
-    const template = createSalesPlanMonth(nextMonth, months.length);
-    setMonths((current) => [...current, { ...template, id: `month-${Date.now()}` }]);
+    setMonths((current) => [...current, createBlankSalesPlanMonth(nextMonth, `month-${Date.now()}`)]);
   };
   const removeMonth = (id: string) => { if (months.length > 1) setMonths((current) => current.filter((month) => month.id !== id)); };
-  const resetPlan = () => {
-    if (!window.confirm("确定重置销售推广计划吗？当前填写的计划周期数据将恢复为默认值。")) return;
+  const loadDemo = () => {
     setAssumptions({ ...DEFAULT_SALES_PLAN_ASSUMPTIONS });
-    setMonths(buildDefaultSalesPlanMonths(currentMonth(), 12));
+    setMonths(buildDefaultSalesPlanMonths(defaultStartMonth, 12));
     setShowCostDetails(false);
+    setIsDemo(true);
+  };
+  const resetPlan = () => {
+    if (!window.confirm("确定恢复默认空白吗？当前填写的销售推广计划将被清空。")) return;
+    setAssumptions({ ...EMPTY_SALES_PLAN_ASSUMPTIONS });
+    setMonths(buildBlankSalesPlanMonths(defaultStartMonth));
+    setShowCostDetails(false);
+    setIsDemo(false);
   };
 
-  const exportWorkbook = () => { void downloadSalesPlanWorkbook(assumptions, months); };
+  const exportWorkbook = () => {
+    const exportAssumptions = isDemo ? {
+      ...assumptions,
+      productName: `【演示数据，不可用于决策】${assumptions.productName || "销售推广计划"}`,
+      productId: `DEMO-${assumptions.productId || "SAMPLE"}`,
+    } : assumptions;
+    void downloadSalesPlanWorkbook(exportAssumptions, months);
+  };
 
-  const assumptionNumberField = (label: string, key: keyof SalesPlanAssumptions, options: { percentage?: boolean; prefix?: string; suffix?: string } = {}) => {
+  const assumptionNumberField = (label: string, key: keyof SalesPlanAssumptions, options: { percentage?: boolean; prefix?: string; suffix?: string; badge?: string } = {}) => {
     const stored = Number(assumptions[key] ?? 0);
-    return <label className="sales-plan-field"><span>{label}</span><div className="sales-plan-input-wrap">{options.prefix && <b>{options.prefix}</b>}<NumberInput min="0" max={options.percentage ? "100" : undefined} step={options.percentage ? "0.1" : "0.01"} value={options.percentage ? stored * 100 : stored} onRawChange={(raw) => setNumericAssumption(key, raw, options.percentage)} />{options.suffix && <em>{options.suffix}</em>}</div></label>;
+    return <label className="sales-plan-field"><span>{label}{options.badge && <RequiredBadge label={options.badge} />}</span><div className="sales-plan-input-wrap">{options.prefix && <b>{options.prefix}</b>}<NumberInput min="0" max={options.percentage ? "100" : undefined} step={options.percentage ? "0.1" : "0.01"} value={options.percentage ? stored * 100 : stored} onRawChange={(raw) => setNumericAssumption(key, raw, options.percentage)} />{options.suffix && <em>{options.suffix}</em>}</div></label>;
   };
   const calculatedField = (label: string, value: string, note?: string, tone = "") => <div className="sales-plan-field sales-plan-calculated-field"><span>{label}</span><strong className={tone}>{value}</strong>{note && <small>{note}</small>}</div>;
   const tableNumberCell = (label: string, month: SalesPlanMonthInput, key: keyof SalesPlanMonthInput, options: { percentage?: boolean; money?: boolean; step?: string } = {}) => {
@@ -150,20 +196,35 @@ function SalesPromotionPlan() {
   const chartLabels = result.months.map((item, index) => item.month || `M${index + 1}`);
   const incompleteNote = incompleteProfitMonths > 0 ? `${incompleteProfitMonths}个月输入不完整` : `${months.length}个月利润已完整计算`;
   return <div className="sales-plan-root">
-    <section className="sales-plan-hero"><div className="sales-plan-hero-title"><span>SALES PROMOTION PLAN</span><h2>销售、广告与利润推进节奏</h2><p>每月只录入日销、CPO、CPC、自然单占比和可选费用率，自动推导广告指标、成本总额与月利润。</p></div><div className="sales-plan-hero-primary"><small>计划周期经营利润 · 共{months.length}个月</small><strong className={valueClass(summary.operatingProfit)}>{money(summary.operatingProfit, currency)}</strong><span>{incompleteNote}</span></div><div className="sales-plan-hero-actions"><button type="button" onClick={exportWorkbook}><FileSpreadsheet size={16} />导出含公式 Excel</button><button type="button" onClick={resetPlan}><RotateCcw size={16} />重置</button></div></section>
+    <ToolSetupPanel
+      requirements={[
+        { label: "实际成交价", met: assumptions.actualSellingPrice > 0 },
+        { label: "采购成本/件", met: assumptions.productCostPerUnit > 0 },
+        { label: "FBA 配送费/件", met: assumptions.fbaFeePerUnit > 0 },
+        { label: "Referral Fee 率", met: assumptions.referralFeeRate > 0 },
+        { label: "月份有效且至少一个月有日销目标", met: months.length > 0 && months.every((month) => /^\d{4}-\d{2}$/.test(month.month)) && months.some((month) => month.targetDailyUnits > 0) },
+        { label: "广告月份的 CPO 与 CPC", met: months.length > 0 && months.every((month) => month.naturalOrderShare >= 1 || (month.cpo > 0 && month.cpc > 0)) },
+      ]}
+      isDemo={isDemo}
+      onLoadDemo={loadDemo}
+      onReset={resetPlan}
+      demoMessage="当前为销售推广计划演示样板，请按真实售价、成本和每月推广目标逐项替换。"
+    />
+
+    <section className="sales-plan-hero"><div className="sales-plan-hero-title"><span>SALES PROMOTION PLAN</span><h2>销售、广告与利润推进节奏</h2><p>每月只录入日销、CPO、CPC、自然单占比和可选费用率，自动推导广告指标、成本总额与月利润。</p></div><div className="sales-plan-hero-primary"><small>计划周期经营利润 · 共{months.length}个月</small><strong className={valueClass(summary.operatingProfit)}>{money(summary.operatingProfit, currency)}</strong><span>{incompleteNote}</span></div><div className="sales-plan-hero-actions"><button type="button" onClick={exportWorkbook}><FileSpreadsheet size={16} />导出含公式 Excel</button><button type="button" onClick={resetPlan}><RotateCcw size={16} />恢复空白</button></div></section>
 
     <section className="sales-plan-kpis"><Kpi label="计划总销量" value={numeric(summary.totalUnits, 1)} note={`共 ${months.length} 个月`} /><Kpi label="销售额" value={money(summary.totalRevenue, currency)} note="实际成交价 × 月销量" /><Kpi label="广告花费" value={money(summary.totalAdSpend, currency)} note={`TACoS ${rate(summary.weightedTacos)} · ACoS ${rate(summary.weightedAcos)}`} /><Kpi label="经营利润" value={money(summary.operatingProfit, currency)} note={`利润率 ${rate(annualProfitMargin)} · 负利润 ${summary.negativeProfitMonths} 月`} tone={valueClass(summary.operatingProfit)} /><Kpi label="累计利润" value={money(summary.endingCumulativeProfit, currency)} note={`最大资金缺口 ${money(summary.maximumFundingGap, currency)}`} tone={valueClass(summary.endingCumulativeProfit)} /><Kpi label="Break-even CPO/CPA" value={money(summary.breakEvenCpo, currency)} note="单件 · 淡季仓储基准" tone={valueClass(summary.breakEvenCpo)} /></section>
 
     <section className="profit-panel sales-plan-assumptions"><div className="sales-plan-panel-heading"><div><SlidersHorizontal size={19} /><span><h3>固定参数</h3><p>黄色区域为手动输入；灰色区域由单件成本公式自动计算。</p></span></div><div className="sales-plan-legend"><span className="sales-plan-legend-input">手动输入</span><span className="sales-plan-legend-calculated">自动计算</span></div></div><div className="sales-plan-assumption-groups">
       <fieldset><legend>产品信息</legend><div className="sales-plan-field-grid"><label className="sales-plan-field"><span>产品名称</span><input value={assumptions.productName} onChange={(event) => setAssumption("productName", event.target.value as SalesPlanAssumptions["productName"])} /></label><label className="sales-plan-field"><span>ASIN / SKU</span><input value={assumptions.productId} onChange={(event) => setAssumption("productId", event.target.value as SalesPlanAssumptions["productId"])} /></label><label className="sales-plan-field"><span>币种</span><select value={assumptions.currency} onChange={(event) => setAssumption("currency", event.target.value as SalesPlanAssumptions["currency"])}><option value="USD">USD</option><option value="CAD">CAD</option><option value="GBP">GBP</option><option value="EUR">EUR</option><option value="JPY">JPY</option></select></label></div></fieldset>
-      <fieldset><legend>单件成本预算</legend><div className="sales-plan-field-grid">{assumptionNumberField("实际成交价", "actualSellingPrice", { prefix: currency })}{assumptionNumberField("采购成本/件", "productCostPerUnit", { prefix: currency })}{assumptionNumberField("仓储费/件", "storageCostPerUnit", { prefix: currency })}{assumptionNumberField("FBA配送费/件", "fbaFeePerUnit", { prefix: currency })}{assumptionNumberField("头程成本/件", "firstMileCostPerUnit", { prefix: currency })}{assumptionNumberField("Referral Fee率", "referralFeeRate", { percentage: true, suffix: "%" })}{calculatedField("Amazon佣金/件", money(amazonCommissionPerUnit, currency), "实际成交价 × 佣金率")}{calculatedField("单件Break-even CPO/CPA", money(summary.breakEvenCpo, currency), "淡季仓储基准", valueClass(summary.breakEvenCpo))}</div><p className="sales-plan-assumption-note"><Info size={15} />Break-even CPO/CPA＝实际成交价－采购－头程－FBA－Amazon佣金－仓储－预计退货损失－其他单件变动成本</p></fieldset>
+      <fieldset><legend>单件成本预算</legend><div className="sales-plan-field-grid">{assumptionNumberField("实际成交价", "actualSellingPrice", { prefix: currency, badge: "核心必填" })}{assumptionNumberField("采购成本/件", "productCostPerUnit", { prefix: currency, badge: "核心必填" })}{assumptionNumberField("仓储费/件", "storageCostPerUnit", { prefix: currency })}{assumptionNumberField("FBA配送费/件", "fbaFeePerUnit", { prefix: currency, badge: "核心必填" })}{assumptionNumberField("头程成本/件", "firstMileCostPerUnit", { prefix: currency, badge: "建议填写，可为 0" })}{assumptionNumberField("Referral Fee率", "referralFeeRate", { percentage: true, suffix: "%", badge: "核心必填" })}{calculatedField("Amazon佣金/件", money(amazonCommissionPerUnit, currency), "实际成交价 × 佣金率")}{calculatedField("单件Break-even CPO/CPA", money(summary.breakEvenCpo, currency), "淡季仓储基准", valueClass(summary.breakEvenCpo))}</div><p className="sales-plan-assumption-note"><Info size={15} />Break-even CPO/CPA＝实际成交价－采购－头程－FBA－Amazon佣金－仓储－预计退货损失－其他单件变动成本</p></fieldset>
       <fieldset><legend>退货与其他费用</legend><div className="sales-plan-field-grid">{assumptionNumberField("预计退货率", "returnRate", { percentage: true, suffix: "%" })}{assumptionNumberField("每退货件平均净损失", "averageReturnLoss", { prefix: currency })}{assumptionNumberField("其他单件变动成本", "otherVariableCostRate", { percentage: true, suffix: "%" })}{calculatedField("预计退货损失/件", money(expectedReturnLossPerUnit, currency), "退货率 × 平均净损失")}{calculatedField("其他变动成本/件", money(otherVariableCostPerUnit, currency), "实际成交价 × 费率")}</div><p className="sales-plan-assumption-note"><Info size={15} />Coupon、秒杀、VINE与站外推广费用及其他合计默认3.7%</p></fieldset>
     </div></section>
 
     <div className="sales-plan-chart-grid"><TrendChart title="销售额与月利润" subtitle="实际成交价作为统一销售口径，退款损失与推广费用单独进入利润。" labels={chartLabels} currency={currency} series={[{ label: "销售额", color: "#4472c4", values: result.months.map((item) => item.salesRevenue) }, { label: "月利润", color: "#70ad47", values: result.months.map((item) => item.monthlyProfit) }]} /><TrendChart title="自然单销量与广告单销量" subtitle="自然销量由自然单占比确定，剩余销量自动归入广告单。" labels={chartLabels} series={[{ label: "自然单销量", color: "#70ad47", values: result.months.map((item) => item.naturalUnits) }, { label: "广告单销量", color: "#ed7d31", values: result.months.map((item) => item.adUnits) }]} /></div>
 
     <section className="profit-panel sales-plan-table-panel"><div className="sales-plan-panel-heading sales-plan-table-heading"><div><TableProperties size={19} /><span><h3>销售推广计划表</h3><p>月份逐行选择；黄色列为输入，费用总额和广告指标全部自动计算。</p></span></div><div className="sales-plan-table-actions"><button type="button" onClick={addMonth}><Plus size={16} />增加月份</button><button className={showCostDetails ? "sales-plan-active" : ""} type="button" onClick={() => setShowCostDetails((current) => !current)}><CalendarRange size={16} />{showCostDetails ? "收起成本明细" : "展开成本明细"}</button></div></div>
-      <div className="sales-plan-table-wrap"><table className="sales-plan-table sales-plan-table-v2"><thead><tr><th>月份</th><th>推广阶段</th><th>运营重点动作</th><th>日销目标</th><th>CPO/CPA</th><th>当月Break-even<br />CPO/CPA</th><th>CPC</th><th>Ad CVR</th><th>ACoS</th><th>TACoS</th><th>自然单占比</th><th>当月其他<br />变动成本率</th><th>月销量</th><th>自然单销量</th><th>广告单销量</th><th>广告花费</th><th>月度推广费用</th><th>月利润</th><th>利润率</th>{showCostDetails && <><th>采购成本<br />当月总额（测算）</th><th>FBA<br />当月总额（测算）</th><th>头程<br />当月总额（测算）</th><th>仓储费<br />当月总额（测算）</th><th>仓储季节系数</th><th>Amazon佣金<br />当月总额（测算）</th><th>预计退款损失<br />当月总额（测算）</th></>}<th>状态</th><th>操作</th></tr></thead>
+      <div className="sales-plan-table-wrap"><table className="sales-plan-table sales-plan-table-v2"><thead><tr><th>月份 <RequiredBadge /></th><th>推广阶段</th><th>运营重点动作</th><th>日销目标 <RequiredBadge label="计划月份必填；暂停月可为 0" /></th><th>CPO/CPA <RequiredBadge label="有广告单时必填" /></th><th>当月Break-even<br />CPO/CPA</th><th>CPC <RequiredBadge label="有广告单时必填" /></th><th>Ad CVR</th><th>ACoS</th><th>TACoS</th><th>自然单占比 <RequiredBadge /></th><th>当月其他<br />变动成本率</th><th>月销量</th><th>自然单销量</th><th>广告单销量</th><th>广告花费</th><th>月度推广费用</th><th>月利润</th><th>利润率</th>{showCostDetails && <><th>采购成本<br />当月总额（测算）</th><th>FBA<br />当月总额（测算）</th><th>头程<br />当月总额（测算）</th><th>仓储费<br />当月总额（测算）</th><th>仓储季节系数</th><th>Amazon佣金<br />当月总额（测算）</th><th>预计退款损失<br />当月总额（测算）</th></>}<th>状态</th><th>操作</th></tr></thead>
         <tbody>{months.map((month, index) => {
           const monthResult: SalesPlanMonthResult = result.months[index];
           const actionListId = `stage-actions-${month.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;

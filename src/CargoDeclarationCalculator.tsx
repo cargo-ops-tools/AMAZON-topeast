@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Box, Check, ClipboardCopy, Info, PackageCheck, RotateCcw, Ruler, Ship, Sparkles } from "lucide-react";
 import NumberInput from "./NumberInput";
 import { numberInputValue } from "./lib/input";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 import {
   calculateCargoDeclaration,
   formatCargoDimension,
@@ -18,6 +19,15 @@ const DEFAULT_INPUT: CargoDeclarationInput = {
   declarationBase: 0,
 };
 
+const DEMO_INPUT: CargoDeclarationInput = {
+  boxLength: 60,
+  boxWidth: 40,
+  boxHeight: 40,
+  dimensionUnit: "cm",
+  unitsPerCarton: 10,
+  declarationBase: 10000,
+};
+
 function positiveNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
@@ -28,20 +38,37 @@ function formatNumber(value: number, digits = 2): string {
 }
 
 function CargoDeclarationCalculator() {
-  const [input, setInput] = useState<CargoDeclarationInput>(DEFAULT_INPUT);
+  const [input, setInput] = useState<CargoDeclarationInput>(() => ({ ...DEFAULT_INPUT }));
   const [copied, setCopied] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const result = useMemo(() => calculateCargoDeclaration(input), [input]);
+  const requirements = [
+    { label: "箱长大于 0", met: input.boxLength > 0 },
+    { label: "箱宽大于 0", met: input.boxWidth > 0 },
+    { label: "箱高大于 0", met: input.boxHeight > 0 },
+    { label: "每箱产品数量为正整数", met: Number.isInteger(input.unitsPerCarton) && input.unitsPerCarton > 0 },
+    { label: "整柜申报基数大于 0", met: input.declarationBase > 0 },
+  ];
 
   const updateNumber = (key: "boxLength" | "boxWidth" | "boxHeight" | "unitsPerCarton" | "declarationBase", value: string) => {
     setInput((current) => ({ ...current, [key]: positiveNumber(value) }));
   };
 
-  const reset = () => setInput(DEFAULT_INPUT);
+  const loadDemo = () => {
+    setInput({ ...DEMO_INPUT });
+    setIsDemo(true);
+  };
+
+  const reset = () => {
+    setInput({ ...DEFAULT_INPUT });
+    setIsDemo(false);
+  };
 
   const copyResult = async () => {
     const best = result.bestOrientation;
     const text = [
       "【货物申报金额】",
+      isDemo ? "数据性质：演示数据，不可用于实际申报" : "数据性质：用户录入数据",
       `纸箱尺寸：${input.boxLength} × ${input.boxWidth} × ${input.boxHeight} ${input.dimensionUnit}`,
       `每箱产品数量：${input.unitsPerCarton} 件`,
       `40HQ 装箱数：${result.cartonsPerContainer} 箱`,
@@ -57,7 +84,7 @@ function CargoDeclarationCalculator() {
 
   const dimensionField = (label: string, key: "boxLength" | "boxWidth" | "boxHeight") => (
     <label className="cargo-field">
-      <span>{label}</span>
+      <span>{label}<RequiredBadge /></span>
       <NumberInput
         min="0"
         step="0.01"
@@ -82,6 +109,16 @@ function CargoDeclarationCalculator() {
         </div>
       </header>
 
+      <ToolSetupPanel
+        requirements={requirements}
+        isDemo={isDemo}
+        onLoadDemo={loadDemo}
+        onReset={reset}
+        title="货物申报测算输入准备"
+        description="补齐箱规、装箱数量和申报基数后，系统才会生成单件申报金额。"
+        demoMessage="当前箱规与申报基数只用于展示计算方式，不可直接作为实际报关或清关申报依据。"
+      />
+
       <div className="cargo-page">
         <section className="cargo-hero">
           <div className="cargo-hero-title">
@@ -105,8 +142,8 @@ function CargoDeclarationCalculator() {
               <div className="cargo-subtitle"><Ruler size={15} /> 外箱尺寸</div>
               <div className="cargo-dimension-grid">{dimensionField("长", "boxLength")}{dimensionField("宽", "boxWidth")}{dimensionField("高", "boxHeight")}</div>
               <label className="cargo-field"><span>尺寸单位</span><select value={input.dimensionUnit} onChange={(event) => setInput((current) => ({ ...current, dimensionUnit: event.target.value as CargoDimensionUnit }))}><option value="cm">cm</option><option value="in">inch</option></select></label>
-              <label className="cargo-field"><span>每箱装产品数量</span><NumberInput min="0" step="1" value={input.unitsPerCarton} placeholder="请输入" onRawChange={(value) => updateNumber("unitsPerCarton", value)} /></label>
-              <label className="cargo-field"><span>整柜申报基数</span><NumberInput min="0" step="0.01" value={input.declarationBase} placeholder="请输入" onRawChange={(value) => updateNumber("declarationBase", value)} /></label>
+              <label className="cargo-field"><span>每箱装产品数量<RequiredBadge /></span><NumberInput min="0" step="1" value={input.unitsPerCarton} placeholder="请输入" onRawChange={(value) => updateNumber("unitsPerCarton", value)} /></label>
+              <label className="cargo-field"><span>整柜申报基数<RequiredBadge /></span><NumberInput min="0" step="0.01" value={input.declarationBase} placeholder="请输入" onRawChange={(value) => updateNumber("declarationBase", value)} /></label>
             </div>
             <div className="cargo-reference"><Info size={15} /><div><b>40HQ 标准内尺寸参考</b><span>1203 × 235 × 269 cm · 约 47.36 × 92.52 × 105.91 inch</span></div></div>
           </section>

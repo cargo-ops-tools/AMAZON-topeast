@@ -45,6 +45,7 @@ import {
 import type { FirstMileTransfer } from "./FirstMileCalculator";
 import { numberInputValue } from "./lib/input";
 import { getDefaultReferralCategory, getReferralFeeCategories, REFERRAL_FEE_SOURCE_URLS } from "./lib/referralFees";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 
 type ProfitTab = "product" | "cost" | "ads" | "promotion" | "simulation" | "dashboard";
 
@@ -98,6 +99,53 @@ const DEFAULT_INPUT: ProfitInput = {
   returnRate: 0,
   unsellableRate: 0,
   returnProcessingCost: 0,
+};
+
+const DEMO_INPUT: ProfitInput = {
+  productName: "示例产品",
+  asinSku: "SKU-PROFIT",
+  category: "Home & Kitchen",
+  referralCategory: "home-kitchen",
+  salesSite: "US",
+  currency: "USD",
+  lifecycle: "new",
+  listingPrice: 29.99,
+  targetMonthlyOrders: 900,
+  monthlyGrowthRate: 0.08,
+  couponRate: 0.1,
+  couponOrderShare: 0.25,
+  dealRate: 0.15,
+  dealOrderShare: 0.1,
+  dealType: "lightning-deal",
+  sellerPromotionEnabled: false,
+  sellerPromotionType: "percentage-off",
+  sellerPromotionRate: 0.1,
+  sellerPromotionOrderShare: 0.1,
+  sellerPromotionBuyQuantity: 2,
+  sellerPromotionFreeQuantity: 1,
+  couponPromotionStacking: "prevent",
+  adOrderShare: 0.45,
+  adSalesShare: 0.48,
+  acos: 0.28,
+  targetTacos: 0.15,
+  cpc: 1.1,
+  adBudget: 4000,
+  purchaseCost: 5.2,
+  packagingCost: 0.45,
+  accessoryCost: 0.3,
+  domesticShippingCost: 0.35,
+  otherProductCost: 0.2,
+  firstMileCost: 1.1,
+  lastMileCost: 0,
+  customsDuty: 0,
+  referralFee: 4.5,
+  manualReferralFee: true,
+  fbaFee: 4.85,
+  storageFee: 0.18,
+  otherAmazonFee: 0.12,
+  returnRate: 0.06,
+  unsellableRate: 0.35,
+  returnProcessingCost: 0.6,
 };
 
 const GRADE_LABELS: Record<ProfitGrade, string> = {
@@ -159,8 +207,9 @@ async function writeClipboard(text: string): Promise<void> {
   }
 }
 
-function buildSummaryRows(input: ProfitInput, result: ReturnType<typeof calculateProfit>) {
+function buildSummaryRows(input: ProfitInput, result: ReturnType<typeof calculateProfit>, isDemo = false) {
   return [
+    { 分区: "数据性质", 指标: "决策使用", 数值: isDemo ? "演示数据，不可用于决策" : "用户录入数据" },
     { 分区: "产品", 指标: "产品名称", 数值: input.productName },
     { 分区: "产品", 指标: "ASIN/SKU", 数值: input.asinSku },
     { 分区: "产品", 指标: "站点", 数值: SITE_LABELS[input.salesSite] },
@@ -200,12 +249,12 @@ function buildSummaryRows(input: ProfitInput, result: ReturnType<typeof calculat
   ];
 }
 
-async function exportProfitWorkbook(input: ProfitInput): Promise<void> {
+async function exportProfitWorkbook(input: ProfitInput, isDemo = false): Promise<void> {
   const XLSX = await import("xlsx");
   const result = calculateProfit(input);
   const scenarios = calculateScenarios(input);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(buildSummaryRows(input, result)), "利润汇总");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(buildSummaryRows(input, result, isDemo)), "利润汇总");
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(scenarios.map((scenario) => ({
     情景: scenario.label,
     月订单: scenario.result.monthlyOrders,
@@ -217,21 +266,22 @@ async function exportProfitWorkbook(input: ProfitInput): Promise<void> {
     月利润: money(scenario.result.netProfit),
     SKU等级: scenario.result.gradeTitle,
   }))), "情景模拟");
-  XLSX.writeFile(workbook, "Amazon_Profit_Simulator.xlsx");
+  XLSX.writeFile(workbook, `${isDemo ? "DEMO-" : ""}Amazon_Profit_Simulator.xlsx`);
 }
 
-async function exportProfitCsv(input: ProfitInput): Promise<void> {
+async function exportProfitCsv(input: ProfitInput, isDemo = false): Promise<void> {
   const XLSX = await import("xlsx");
-  const worksheet = XLSX.utils.json_to_sheet(buildSummaryRows(input, calculateProfit(input)));
+  const worksheet = XLSX.utils.json_to_sheet(buildSummaryRows(input, calculateProfit(input), isDemo));
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Profit");
-  XLSX.writeFile(workbook, "Amazon_Profit_Simulator.csv", { bookType: "csv" });
+  XLSX.writeFile(workbook, `${isDemo ? "DEMO-" : ""}Amazon_Profit_Simulator.csv`, { bookType: "csv" });
 }
 
 function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: ProfitSimulatorProps) {
   const [tab, setTab] = useState<ProfitTab>("dashboard");
   const [input, setInput] = useState(DEFAULT_INPUT);
   const [copied, setCopied] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const result = useMemo(() => calculateProfit(input), [input]);
   const scenarios = useMemo(() => calculateScenarios(input), [input]);
   const maxScenarioProfit = Math.max(1, ...scenarios.map((scenario) => Math.abs(scenario.result.netProfit)));
@@ -267,6 +317,20 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
     setInput((current) => ({ ...current, category, referralCategory: getDefaultReferralCategory(current.salesSite, category) }));
   };
 
+  const loadDemo = () => {
+    setInput({ ...DEMO_INPUT });
+    setTab("dashboard");
+    setCopied(false);
+    setIsDemo(true);
+  };
+
+  const resetToBlank = () => {
+    setInput({ ...DEFAULT_INPUT });
+    setTab("product");
+    setCopied(false);
+    setIsDemo(false);
+  };
+
   useEffect(() => {
     if (!firstMileTransfer) return;
     const matchingSite = Object.entries(MARKETPLACE_CONFIG).find(([, config]) => config.currency === firstMileTransfer.currency)?.[0] as SalesSite | undefined;
@@ -288,6 +352,7 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
   const copySummary = async () => {
     await writeClipboard([
       "【亚马逊利润测算】",
+      `数据性质：${isDemo ? "演示数据，不可用于决策" : "用户录入数据"}`,
       `产品：${input.productName}`,
       `ASIN/SKU：${input.asinSku}`,
       `销售币种：${input.currency}`,
@@ -310,9 +375,9 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
     window.setTimeout(() => setCopied(false), 1600);
   };
 
-  const numberField = (label: string, key: keyof ProfitInput, options?: { prefix?: string; suffix?: string; step?: number }) => (
+  const numberField = (label: string, key: keyof ProfitInput, options?: { prefix?: string; suffix?: string; step?: number; badge?: string }) => (
     <label className="profit-field">
-      <span>{label}</span>
+      <span>{label}{options?.badge && <RequiredBadge label={options.badge} />}</span>
       <div className="profit-input-wrap">
         {options?.prefix && <b>{options.prefix}</b>}
         <input type="number" min="0" step={options?.step ?? 0.01} value={numberInputValue(input[key] as number)} onChange={(event) => update(key, positive(event.target.value) as never)} />
@@ -338,11 +403,22 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
         </div>
         <div className="profit-top-actions">
           <button className="rule-link" type="button" onClick={() => window.print()}><Printer size={15} /> 打印</button>
-          <button className="rule-link" type="button" onClick={() => exportProfitWorkbook(input)}><FileSpreadsheet size={15} /> 导出 Excel</button>
+          <button className="rule-link" type="button" onClick={() => exportProfitWorkbook(input, isDemo)}><FileSpreadsheet size={15} /> 导出 Excel</button>
         </div>
       </header>
 
       <div className="profit-page">
+        <ToolSetupPanel
+          requirements={[
+            { label: "Listing 售价", met: input.listingPrice > 0 },
+            { label: "目标月销量", met: input.targetMonthlyOrders > 0 },
+          ]}
+          isDemo={isDemo}
+          onLoadDemo={loadDemo}
+          onReset={resetToBlank}
+          demoMessage="当前数据来自利润测算演示样板，请替换为真实售价、销量和成本后再做经营决策。"
+        />
+
         <div className="profit-tabs" role="tablist" aria-label="利润测算视图">
           <button role="tab" aria-selected={tab === "product"} className={tab === "product" ? "active" : ""} type="button" onClick={() => setTab("product")}><Package size={15} /> 产品输入</button>
           <button role="tab" aria-selected={tab === "cost"} className={tab === "cost" ? "active" : ""} type="button" onClick={() => setTab("cost")}><ReceiptText size={15} /> 成本模型</button>
@@ -368,9 +444,9 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
             <small>运营评级</small><strong>{GRADE_LABELS[result.grade]}</strong><span>{result.recommendation}</span>
           </div>
           <div className="profit-hero-actions">
-            <button type="button" onClick={() => setInput(DEFAULT_INPUT)} title="清空数据"><RotateCcw size={15} /></button>
+            <button type="button" onClick={resetToBlank} title="恢复默认空白"><RotateCcw size={15} /></button>
             <button type="button" onClick={copySummary}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? "已复制" : "复制"}</button>
-            <button type="button" onClick={() => exportProfitCsv(input)}><Download size={15} /> CSV</button>
+            <button type="button" onClick={() => exportProfitCsv(input, isDemo)}><Download size={15} /> CSV</button>
           </div>
         </section>
 
@@ -383,8 +459,8 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
               <label className="profit-field"><span>销售站点</span><select value={input.salesSite} onChange={(event) => updateSalesSite(event.target.value as SalesSite)}>{Object.entries(SITE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label className="profit-field"><span>Amazon Browse Node（展示类目）</span><select value={input.category} onChange={(event) => updateBrowseCategory(event.target.value)}>{marketplace.categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
               <label className="profit-field"><span>Amazon Referral Fee Category（佣金类目）</span><select value={input.referralCategory} onChange={(event) => update("referralCategory", event.target.value)}>{referralCategories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select></label>
-              {numberField("Listing 售价", "listingPrice", { prefix: currencySymbol })}
-              {numberField("目标月销量", "targetMonthlyOrders", { suffix: "件", step: 1 })}
+              {numberField("Listing 售价", "listingPrice", { prefix: currencySymbol, badge: "核心必填" })}
+              {numberField("目标月销量", "targetMonthlyOrders", { suffix: "件", step: 1, badge: "核心必填" })}
               {percentField("预计月增长率", "monthlyGrowthRate")}
               <label className="profit-field"><span>销售币种</span><input value={`${input.currency} (${currencySymbol})`} disabled /></label>
             </div>
@@ -413,12 +489,12 @@ function ProfitSimulator({ firstMileTransfer, onFirstMileTransferApplied }: Prof
         {tab === "cost" && <div className="profit-workspace cost-workspace">
           <section className="profit-panel">
             <div className="profit-panel-heading"><Package size={18} /><div><h2>产品成本</h2><p>采购、包装、配件与国内段成本</p></div></div>
-            <div className="profit-form-grid">{numberField("采购成本", "purchaseCost", { prefix: currencySymbol })}{numberField("包装成本", "packagingCost", { prefix: currencySymbol })}{numberField("配件成本", "accessoryCost", { prefix: currencySymbol })}{numberField("国内运输", "domesticShippingCost", { prefix: currencySymbol })}{numberField("其他成本", "otherProductCost", { prefix: currencySymbol })}</div>
+            <div className="profit-form-grid">{numberField("采购成本", "purchaseCost", { prefix: currencySymbol, badge: "建议填写" })}{numberField("包装成本", "packagingCost", { prefix: currencySymbol })}{numberField("配件成本", "accessoryCost", { prefix: currencySymbol })}{numberField("国内运输", "domesticShippingCost", { prefix: currencySymbol })}{numberField("其他成本", "otherProductCost", { prefix: currencySymbol })}</div>
             <div className="panel-total"><span>单件产品总成本</span><strong>{formattedMoney(result.productCostPerUnit)}</strong></div>
           </section>
           <section className="profit-panel">
             <div className="profit-panel-heading"><WalletCards size={18} /><div><h2>物流与 Amazon 费用</h2><p>Referral Fee 自动匹配官方类目，FBA 费用采用上游结果</p></div></div>
-            <div className="profit-form-grid">{numberField("头程物流/件", "firstMileCost", { prefix: currencySymbol })}{numberField("关税 / VAT/件", "customsDuty", { prefix: currencySymbol })}{numberField("尾程成本/件", "lastMileCost", { prefix: currencySymbol })}{numberField("FBA 配送费", "fbaFee", { prefix: currencySymbol })}{numberField("仓储费/件", "storageFee", { prefix: currencySymbol })}{numberField("其他 Amazon 费", "otherAmazonFee", { prefix: currencySymbol })}</div>
+            <div className="profit-form-grid">{numberField("头程物流/件", "firstMileCost", { prefix: currencySymbol, badge: "建议填写，可为 0" })}{numberField("关税 / VAT/件", "customsDuty", { prefix: currencySymbol })}{numberField("尾程成本/件", "lastMileCost", { prefix: currencySymbol })}{numberField("FBA 配送费", "fbaFee", { prefix: currencySymbol, badge: "建议填写" })}{numberField("仓储费/件", "storageFee", { prefix: currencySymbol })}{numberField("其他 Amazon 费", "otherAmazonFee", { prefix: currencySymbol })}</div>
             <div className="referral-fee-block">
               <div className="referral-fee-heading"><div><span>Referral Fee / 销售佣金</span><b>{result.referralFeeCategoryLabel}</b></div><label className="referral-mode-toggle"><input type="checkbox" checked={input.manualReferralFee} onChange={(event) => update("manualReferralFee", event.target.checked)} /><i /><span>手动覆盖</span></label></div>
               {input.manualReferralFee ? <div className="referral-manual-field">{numberField("手动单件佣金", "referralFee", { prefix: currencySymbol })}</div> : <div className="referral-auto-grid"><div><small>自动佣金 / 件</small><strong>{formattedMoney(result.referralFeePerUnit)}</strong></div><div><small>月佣金合计</small><strong>{formattedMoney(result.referralFeeTotal)}</strong></div><div><small>成交额有效费率</small><strong>{percent(result.referralFeeEffectiveRate)}</strong></div><div><small>最低佣金命中</small><strong>{number(result.referralFeeMinimumAppliedOrders, 0)} 单</strong></div></div>}

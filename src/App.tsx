@@ -91,8 +91,8 @@ function App() {
         <div className="brand">
           <div className="brand-mark"><PackageCheck size={22} /></div>
           <div>
-            <strong>TOPEAST</strong>
-            <span>AMAZON OPS</span>
+            <strong>亚马逊通用</strong>
+            <span>工具箱</span>
           </div>
         </div>
 

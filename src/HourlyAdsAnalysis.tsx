@@ -13,7 +13,6 @@ import {
   Info,
   Link2,
   ListChecks,
-  RefreshCcw,
   ShieldCheck,
   Trash2,
   Upload,
@@ -25,6 +24,7 @@ import {
   type ParsedReportData,
   type RawRecord,
 } from "./lib/hourlyAds";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 
 type UploadStatus = "ready" | "warning" | "error";
 
@@ -138,6 +138,13 @@ const TIME_ZONES = [
   ["Asia/Shanghai", "中国标准时间 · Shanghai"],
 ] as const;
 
+const DEMO_HOURLY_ROWS: RawRecord[] = [
+  { "Event Time": "2026-01-15T08:00:00-08:00", "Campaign Name": "演示活动 · 品牌词", Impressions: 1200, Clicks: 28, Spend: 20.16, Orders: 5, Sales: 149.95 },
+  { "Event Time": "2026-01-15T12:00:00-08:00", "Campaign Name": "演示活动 · 品牌词", Impressions: 1850, Clicks: 46, Spend: 34.50, Orders: 9, Sales: 269.91 },
+  { "Event Time": "2026-01-15T18:00:00-08:00", "Campaign Name": "演示活动 · 泛词", Impressions: 2400, Clicks: 55, Spend: 47.30, Orders: 7, Sales: 209.93 },
+  { "Event Time": "2026-01-15T22:00:00-08:00", "Campaign Name": "演示活动 · 泛词", Impressions: 980, Clicks: 17, Spend: 15.64, Orders: 2, Sales: 59.98 },
+];
+
 const reportFormats = ".csv,.xlsx,.xls,.json,text/csv,application/json";
 
 type DirectoryInputProps = InputHTMLAttributes<HTMLInputElement> & { webkitdirectory?: string };
@@ -221,6 +228,7 @@ function HourlyAdsAnalysis() {
   const [isParsing, setIsParsing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [isDemo, setIsDemo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -236,6 +244,11 @@ function HourlyAdsAnalysis() {
   });
   const hasErrors = items.some((item) => item.status === "error");
   const analysisReady = Boolean(site) && hasRequiredHourlySource && !hasErrors;
+  const setupRequirements = [
+    { label: "已选择 Amazon 销售站点", met: Boolean(site) },
+    { label: "已载入至少 1 份有效小时数据", met: hasRequiredHourlySource },
+    { label: "上传数据没有解析错误", met: items.length > 0 && !hasErrors },
+  ];
 
   useEffect(() => {
     setItems((current) => current.map((item) => {
@@ -252,6 +265,8 @@ function HourlyAdsAnalysis() {
   const addFiles = async (files: File[], selectedFolder = "") => {
     const supportedFiles = files.filter((file) => /\.(csv|xlsx?|json)$/i.test(file.name));
     if (supportedFiles.length === 0) return;
+    if (isDemo && !selectedFolder) setFolderName("");
+    setIsDemo(false);
     setIsParsing(true);
     if (selectedFolder) setFolderName(selectedFolder);
     const next: UploadItem[] = [];
@@ -283,8 +298,9 @@ function HourlyAdsAnalysis() {
     }
 
     setItems((current) => {
-      const existingNames = new Set(current.map((item) => `${item.relativePath}|${item.fileName}`));
-      return [...current, ...next.filter((item) => !existingNames.has(`${item.relativePath}|${item.fileName}`))];
+      const withoutDemo = current.filter((item) => item.id !== "hourly-demo");
+      const existingNames = new Set(withoutDemo.map((item) => `${item.relativePath}|${item.fileName}`));
+      return [...withoutDemo, ...next.filter((item) => !existingNames.has(`${item.relativePath}|${item.fileName}`))];
     });
     setIsParsing(false);
   };
@@ -320,9 +336,36 @@ function HourlyAdsAnalysis() {
 
   const removeItem = (id: string) => setItems((current) => current.filter((item) => item.id !== id));
 
-  const clearUploads = () => {
+  const loadDemo = () => {
+    const report = inspectReport("演示-Marketing-Stream.json", DEMO_HOURLY_ROWS, SITE_CONFIG.US.timeZone);
+    setSite("US");
+    setTimeZone("account");
+    setAttributionWindow("7");
+    setDateFrom(report.dateFrom);
+    setDateTo(report.dateTo);
+    setFolderName("内置演示样板");
+    setItems([{
+      id: "hourly-demo",
+      fileName: "演示-Marketing-Stream.json",
+      fileSize: 0,
+      relativePath: "内置演示样板",
+      report,
+      status: "ready",
+      error: "",
+    }]);
+    setIsDemo(true);
+  };
+
+  const restoreBlank = () => {
+    setSite("");
+    setTimeZone("account");
+    setAttributionWindow("7");
+    setDateFrom("");
+    setDateTo("");
     setItems([]);
     setFolderName("");
+    setIsDragOver(false);
+    setIsDemo(false);
   };
 
   const preview = loadedReports[0]?.report;
@@ -338,7 +381,6 @@ function HourlyAdsAnalysis() {
         </div>
         <div className="hourly-ads-top-actions">
           <a className="rule-link" href="https://advertising.amazon.com/API/docs/en-us/marketing-stream" target="_blank" rel="noreferrer"><Link2 size={15} /> 官方数据文档</a>
-          <button className="rule-link" type="button" onClick={clearUploads}><RefreshCcw size={15} /> 清空上传</button>
         </div>
       </header>
 
@@ -358,6 +400,16 @@ function HourlyAdsAnalysis() {
           </div>
         </section>
 
+        <ToolSetupPanel
+          requirements={setupRequirements}
+          isDemo={isDemo}
+          onLoadDemo={loadDemo}
+          onReset={restoreBlank}
+          title="广告分时分析输入准备"
+          description="核心必填为销售站点，以及至少 1 份包含小时或时间戳和关键广告指标的有效数据。"
+          demoMessage="当前为内置 Marketing Stream 演示数据，只用于查看字段识别与准备状态，不可用于投放决策。"
+        />
+
         <div className="hourly-ads-grid">
           <section className="hourly-ads-panel hourly-config-panel">
             <div className="hourly-panel-heading">
@@ -365,11 +417,11 @@ function HourlyAdsAnalysis() {
               <Database size={18} />
             </div>
             <div className="hourly-form">
-              <label className="hourly-field"><span>Amazon 销售站点</span><select value={site} onChange={(event) => { const value = event.target.value; setSite(value); if (value && timeZone === "account") setTimeZone("account"); }}><option value="">请选择站点</option>{Object.entries(SITE_CONFIG).map(([code, config]) => <option key={code} value={code}>{code} · {config.label}</option>)}</select></label>
+              <label className="hourly-field"><span>Amazon 销售站点 <RequiredBadge /></span><select value={site} onChange={(event) => { const value = event.target.value; setSite(value); if (value && timeZone === "account") setTimeZone("account"); }}><option value="">请选择站点</option>{Object.entries(SITE_CONFIG).map(([code, config]) => <option key={code} value={code}>{code} · {config.label}</option>)}</select></label>
               <label className="hourly-field"><span>账号时区</span><select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>{TIME_ZONES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <div className="hourly-form-grid">
-                <label className="hourly-field"><span>数据开始日期</span><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
-                <label className="hourly-field"><span>数据结束日期</span><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
+                <label className="hourly-field"><span>数据开始日期（可选）</span><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
+                <label className="hourly-field"><span>数据结束日期（可选）</span><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
               </div>
               <label className="hourly-field"><span>广告归因窗口</span><select value={attributionWindow} onChange={(event) => setAttributionWindow(event.target.value)}><option value="1">1 天</option><option value="7">7 天</option><option value="14">14 天</option><option value="30">30 天</option></select></label>
               <div className="hourly-config-summary">
@@ -383,7 +435,7 @@ function HourlyAdsAnalysis() {
 
           <section className="hourly-ads-panel hourly-upload-panel">
             <div className="hourly-panel-heading">
-              <div><span>02</span><div><h2>设置上传路径</h2><p>选择文件或一次选择一个本地文件夹</p></div></div>
+              <div><span>02</span><div><h2>设置上传路径 <RequiredBadge label="小时数据必填" /></h2><p>选择文件或一次选择一个本地文件夹</p></div></div>
               <Upload size={18} />
             </div>
             <div className="hourly-upload-actions">

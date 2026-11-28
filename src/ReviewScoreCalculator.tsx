@@ -2,13 +2,11 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
-  Beaker,
   Calculator,
   Check,
   Clipboard,
   Download,
   Info,
-  RotateCcw,
   Star,
   Target,
 } from "lucide-react";
@@ -23,6 +21,7 @@ import {
 } from "./lib/reviewScore";
 import { numberInputValue } from "./lib/input";
 import ListingScorePanel from "./ListingScorePanel";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 
 type ScoreGroup = keyof ReviewScoreInput;
 
@@ -65,6 +64,9 @@ function ReviewScoreCalculator() {
     () => calculateReviewScoreScenario(result, targetDisplayScore),
     [result, targetDisplayScore],
   );
+  const setupRequirements = [
+    { label: "至少录入 1 条 Review 或仅点星 Rating", met: result.totalCount > 0 },
+  ];
 
   const updateCount = (group: ScoreGroup, star: ScoreStar, value: string) => {
     setInput((current) => ({
@@ -155,14 +157,17 @@ function ReviewScoreCalculator() {
 
         <div className="review-tool-divider" id="review-rating">
           <div><span>REVIEW / RATING SCENARIO</span><h2>评价星级推演</h2><p>计算当前经验分、升档所需 5 星数与低星承压空间</p></div>
-          <div><button type="button" onClick={applySample}><Beaker size={16} /> 填入示例</button><button type="button" onClick={clear}><RotateCcw size={16} /> 清空</button></div>
         </div>
 
-        {isSample && (
-          <div className="listing-sample-banner" role="status">
-            <Info size={17} /> 当前 Review/Rating 区域包含演示数据；即使局部修改也不可用于真实链接判断，请清空后录入同一 ASIN 的可拆分数据。
-          </div>
-        )}
+        <ToolSetupPanel
+          requirements={setupRequirements}
+          isDemo={isSample}
+          onLoadDemo={applySample}
+          onReset={clear}
+          title="Review / Rating 输入准备"
+          description="Review 与仅点星 Rating 的十个格子中至少填写一项；两组数据必须可拆分，避免重复计算。"
+          demoMessage="当前为 Review / Rating 演示数据，即使局部修改也不可用于真实 ASIN 判断。"
+        />
 
         <section className="review-score-hero" aria-live="polite">
           <div className="review-score-primary">
@@ -183,7 +188,7 @@ function ReviewScoreCalculator() {
             <div className="review-score-heading">
               <Calculator size={18} />
               <div>
-                <h2 id="review-score-input-title">星级数量录入</h2>
+                <h2 id="review-score-input-title">星级数量录入 <RequiredBadge label="至少一项必填" /></h2>
                 <p>Review 为文字评论；Rating 仅填“不含文字 Review”的点星记录，避免重复计算</p>
               </div>
             </div>
@@ -223,11 +228,6 @@ function ReviewScoreCalculator() {
                   </label>
                 </div>
               ))}
-            </div>
-
-            <div className="score-input-actions">
-              <button type="button" onClick={applySample}><Beaker size={15} /> 示例：29 个评分 / 4.3</button>
-              <button type="button" onClick={clear}><RotateCcw size={15} /> 清空</button>
             </div>
           </section>
 

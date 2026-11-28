@@ -45,6 +45,38 @@ button { letter-spacing: 0; }
 .topbar p { margin: 0; color: #6a746f; font-size: 13px; }
 .rule-link { flex: 0 0 auto; padding: 9px 12px; display: inline-flex; align-items: center; gap: 7px; color: #33423b; border: 1px solid #cfd7d2; border-radius: 5px; background: #fff; font-size: 12px; font-weight: 650; text-decoration: none; }
 .rule-link:hover { border-color: #8a9992; background: #f7f9f7; }
+.tool-setup-panel { margin: 18px clamp(18px, 4vw, 60px) 0; overflow: hidden; background: #fff; border: 1px solid #d9dfdb; border-radius: 7px; box-shadow: 0 6px 20px rgba(32, 46, 39, .04); }
+.tool-setup-panel.is-demo { border-color: #e2b65a; }
+.tool-setup-main { min-height: 64px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.tool-setup-copy { min-width: 0; display: grid; gap: 3px; }
+.tool-setup-copy strong { color: #24312b; font-size: 13px; }
+.tool-setup-copy span { color: #748079; font-size: 11px; line-height: 1.45; }
+.tool-setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tool-setup-actions button { min-height: 34px; padding: 7px 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #34423c; background: #fff; border: 1px solid #cfd7d2; border-radius: 5px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.tool-setup-actions button:first-child { color: #725619; background: #fffaf0; border-color: #dcc17b; }
+.tool-setup-actions button:hover { background: #f4f7f5; border-color: #87978f; }
+.tool-requirement-summary { padding: 10px 14px; display: flex; align-items: flex-start; gap: 12px; background: #f7f9f7; border-top: 1px solid #e4e9e5; }
+.tool-requirement-summary > b { flex: 0 0 auto; padding-top: 3px; color: #445149; font-size: 11px; }
+.tool-requirement-list { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.tool-requirement-list span { padding: 3px 7px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid; border-radius: 99px; font-size: 10px; font-weight: 700; }
+.tool-requirement-list .is-met { color: #286844; background: #eaf5ee; border-color: #bad9c5; }
+.tool-requirement-list .is-missing { color: #966028; background: #fff6e8; border-color: #e7c89d; }
+.tool-demo-warning { padding: 10px 14px; display: flex; align-items: flex-start; gap: 8px; color: #7a541a; background: #fff5dc; border-top: 1px solid #ead29b; font-size: 11px; line-height: 1.5; }
+.tool-demo-warning svg { margin-top: 1px; flex: 0 0 auto; }
+.tool-required-badge { margin-left: 5px; padding: 2px 5px; display: inline-flex !important; align-items: center; color: #9a492c !important; background: #fff0e8; border: 1px solid #ecc7b6; border-radius: 3px; font-size: 9px !important; font-weight: 800 !important; line-height: 1.2; white-space: nowrap; }
+.profit-page > .tool-setup-panel,
+.review-score-page > .tool-setup-panel,
+.listing-score-section > .tool-setup-panel,
+.sim-page > .tool-setup-panel,
+.hourly-ads-page > .tool-setup-panel,
+.sales-plan-root > .tool-setup-panel { margin: 0; }
+@media (max-width: 760px) {
+  .tool-setup-main, .tool-requirement-summary { align-items: stretch; flex-direction: column; }
+  .tool-setup-actions button { flex: 1; }
+}
+@media print {
+  .tool-setup-actions { display: none !important; }
+}
 .workspace { padding: 28px clamp(18px, 4vw, 60px) 56px; display: grid; grid-template-columns: minmax(290px, 356px) minmax(540px, 1fr); align-items: start; gap: 24px; }
 
 .input-panel { position: sticky; top: 20px; overflow: hidden; background: #fff; border: 1px solid #d9dfdb; border-radius: 7px; box-shadow: 0 8px 28px rgba(32, 46, 39, .05); }

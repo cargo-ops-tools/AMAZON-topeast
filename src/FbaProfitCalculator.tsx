@@ -13,7 +13,28 @@ import {
   type WeightBasis,
   type WeightUnit,
 } from "./lib/fbaProfit";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 import "./FbaProfitCalculator.css";
+
+const EMPTY_FBA_PROFIT_INPUT: FbaProfitInput = {
+  ...DEFAULT_FBA_PROFIT_INPUT,
+  length: 0,
+  width: 0,
+  height: 0,
+  weight: 0,
+  priceUsd: 0,
+  cogsRmb: 0,
+  exchangeRateRmbPerUsd: 0,
+  advertisingRate: 0,
+  storageTurnoverWeeks: 0,
+  packCountLength: 0,
+  packCountWidth: 0,
+  packCountHeight: 0,
+  cartonTareKg: 0,
+  packMarginLengthCm: 0,
+  packMarginWidthCm: 0,
+  packMarginHeightCm: 0,
+};
 
 const REFERENCE_SOURCE_URL =
   "https://github.com/rughouse-fba-tools/fba-calculator/blob/f9f2d1bc6cb9f19214e5f0fda021d0eee01ec3ed/index.html";
@@ -67,6 +88,7 @@ interface NumericFieldProps {
   step?: number | string;
   min?: number;
   max?: number;
+  required?: boolean;
   className?: string;
   onChange: (value: number) => void;
 }
@@ -79,19 +101,20 @@ function NumericField({
   step = "any",
   min,
   max,
+  required = false,
   className = "",
   onChange,
 }: NumericFieldProps) {
   return (
     <label className={`fba-profit__field ${className}`.trim()} htmlFor={id}>
       <span className="fba-profit__field-label">
-        {label}{unit && <span className="fba-profit__unit">{unit}</span>}
+        {label}{required && <RequiredBadge />}{unit && <span className="fba-profit__unit">{unit}</span>}
       </span>
       <input
         id={id}
         type="number"
         inputMode="decimal"
-        value={Number.isFinite(value) ? value : 0}
+        value={required && value === 0 ? "" : Number.isFinite(value) ? value : 0}
         step={step}
         min={min}
         max={max}
@@ -167,7 +190,8 @@ function roundInput(value: number, digits = 4): number {
 }
 
 function FbaProfitCalculator() {
-  const [input, setInput] = useState<FbaProfitInput>(() => ({ ...DEFAULT_FBA_PROFIT_INPUT }));
+  const [input, setInput] = useState<FbaProfitInput>(() => ({ ...EMPTY_FBA_PROFIT_INPUT }));
+  const [isDemo, setIsDemo] = useState(false);
   const [referralCategoryIndex, setReferralCategoryIndex] = useState(() => {
     const index = REFERRAL_CATEGORIES.findIndex((category) => category.rate === DEFAULT_FBA_PROFIT_INPUT.referralRate);
     return index >= 0 ? index : 0;
@@ -179,6 +203,31 @@ function FbaProfitCalculator() {
   const updateInput = <K extends keyof FbaProfitInput,>(key: K, value: FbaProfitInput[K]) => {
     setInput((current) => ({ ...current, [key]: value }));
   };
+
+  const loadDemo = () => {
+    setInput({ ...DEFAULT_FBA_PROFIT_INPUT });
+    const index = REFERRAL_CATEGORIES.findIndex((category) => category.rate === DEFAULT_FBA_PROFIT_INPUT.referralRate);
+    setReferralCategoryIndex(index >= 0 ? index : 0);
+    setIsDemo(true);
+  };
+
+  const reset = () => {
+    setInput({ ...EMPTY_FBA_PROFIT_INPUT });
+    const index = REFERRAL_CATEGORIES.findIndex((category) => category.rate === EMPTY_FBA_PROFIT_INPUT.referralRate);
+    setReferralCategoryIndex(index >= 0 ? index : 0);
+    setIsDemo(false);
+  };
+
+  const requirements = [
+    { label: "最长边、次长边、最短边均大于 0 且顺序正确", met: input.length > 0 && input.width > 0 && input.height > 0 && input.length >= input.width && input.width >= input.height },
+    { label: "产品重量大于 0", met: input.weight > 0 },
+    { label: "US 售价大于 0", met: input.priceUsd > 0 },
+    { label: "采购成本大于 0", met: input.cogsRmb > 0 },
+    { label: "人民币兑美元汇率大于 0", met: input.exchangeRateRmbPerUsd > 0 },
+    { label: "三个方向装箱数量均为正整数", met: [input.packCountLength, input.packCountWidth, input.packCountHeight].every((value) => Number.isInteger(value) && value > 0) },
+  ];
+  const coreInputReady = requirements.every((item) => item.met);
+  const completedRequirementCount = requirements.filter((item) => item.met).length;
 
   const changeDimensionUnit = (nextUnit: DimensionUnit) => {
     setInput((current) => {
@@ -240,6 +289,16 @@ function FbaProfitCalculator() {
         </a>
       </header>
 
+      <ToolSetupPanel
+        requirements={requirements}
+        isDemo={isDemo}
+        onLoadDemo={loadDemo}
+        onReset={reset}
+        title="FBA 利润测算输入准备"
+        description="核心产品、成本和装箱数据齐全后才显示利润结果；恢复空白时仍保留系统费率、类目和周期规则。"
+        demoMessage="当前数字沿用原参考模型，仅用于展示 Size Tier、FBA 费用和头程利润的计算方式，不可直接用于实际产品决策。"
+      />
+
       <div className="fba-profit__page">
         <div className="fba-profit__grid">
           <div className="fba-profit__stack">
@@ -259,9 +318,9 @@ function FbaProfitCalculator() {
                   />
                 </div>
                 <div className="fba-profit__section fba-profit__field-grid">
-                  <NumericField id="fba-profit-length" label="最长边" unit={input.dimensionUnit} value={input.length} step={0.1} min={0} onChange={(value) => updateInput("length", value)} />
-                  <NumericField id="fba-profit-width" label="次长边" unit={input.dimensionUnit} value={input.width} step={0.1} min={0} onChange={(value) => updateInput("width", value)} />
-                  <NumericField id="fba-profit-height" label="最短边" unit={input.dimensionUnit} value={input.height} step={0.1} min={0} onChange={(value) => updateInput("height", value)} />
+                  <NumericField id="fba-profit-length" label="最长边" unit={input.dimensionUnit} value={input.length} step={0.1} min={0} required onChange={(value) => updateInput("length", value)} />
+                  <NumericField id="fba-profit-width" label="次长边" unit={input.dimensionUnit} value={input.width} step={0.1} min={0} required onChange={(value) => updateInput("width", value)} />
+                  <NumericField id="fba-profit-height" label="最短边" unit={input.dimensionUnit} value={input.height} step={0.1} min={0} required onChange={(value) => updateInput("height", value)} />
                 </div>
                 <div className="fba-profit__section">
                   <span className="fba-profit__section-label">重量单位</span>
@@ -273,8 +332,8 @@ function FbaProfitCalculator() {
                   />
                 </div>
                 <div className="fba-profit__section fba-profit__field-grid fba-profit__field-grid--two">
-                  <NumericField id="fba-profit-weight" label="产品重量" unit={input.weightUnit} value={input.weight} step={input.weightUnit === "g" ? 1 : 0.01} min={0} onChange={(value) => updateInput("weight", value)} />
-                  <NumericField id="fba-profit-price" label="US 售价" unit="$" value={input.priceUsd} step={0.01} min={0} onChange={(value) => updateInput("priceUsd", value)} />
+                  <NumericField id="fba-profit-weight" label="产品重量" unit={input.weightUnit} value={input.weight} step={input.weightUnit === "g" ? 1 : 0.01} min={0} required onChange={(value) => updateInput("weight", value)} />
+                  <NumericField id="fba-profit-price" label="US 售价" unit="$" value={input.priceUsd} step={0.01} min={0} required onChange={(value) => updateInput("priceUsd", value)} />
                 </div>
                 <div className="fba-profit__charge-grid" aria-label="单品 FBA 计费重量比较">
                   <div className="fba-profit__charge-card">
@@ -304,8 +363,8 @@ function FbaProfitCalculator() {
               </div>
               <div className="fba-profit__card-body">
                 <div className="fba-profit__field-grid fba-profit__field-grid--two">
-                  <NumericField id="fba-profit-cogs" label="采购价（含税）" unit="¥" value={input.cogsRmb} step={0.01} min={0} onChange={(value) => updateInput("cogsRmb", value)} />
-                  <NumericField id="fba-profit-fx" label="汇率" unit="¥/$" value={input.exchangeRateRmbPerUsd} step={0.001} min={0} onChange={(value) => updateInput("exchangeRateRmbPerUsd", value)} />
+                  <NumericField id="fba-profit-cogs" label="采购价（含税）" unit="¥" value={input.cogsRmb} step={0.01} min={0} required onChange={(value) => updateInput("cogsRmb", value)} />
+                  <NumericField id="fba-profit-fx" label="汇率" unit="¥/$" value={input.exchangeRateRmbPerUsd} step={0.001} min={0} required onChange={(value) => updateInput("exchangeRateRmbPerUsd", value)} />
                   <NumericField id="fba-profit-ad-rate" label="广告消耗占比" unit="%" value={roundInput(input.advertisingRate * 100)} step={0.5} min={0} onChange={(value) => updateInput("advertisingRate", value / 100)} />
                   <NumericField id="fba-profit-turnover" label="仓储利用率" unit="周（FBA Dashboard）" value={input.storageTurnoverWeeks} step={1} min={0} onChange={(value) => updateInput("storageTurnoverWeeks", value)} />
                   <SelectField id="fba-profit-storage-surcharge" label="额外仓储利用率附加费" value={input.storageUtilizationSurcharge ? "yes" : "no"} onChange={(value) => updateInput("storageUtilizationSurcharge", value === "yes")}>
@@ -365,9 +424,9 @@ function FbaProfitCalculator() {
               <div className="fba-profit__card-body">
                 <span className="fba-profit__section-label">装箱方法（手动填写三个方向的数量）</span>
                 <div className="fba-profit__field-grid">
-                  <NumericField className="fba-profit__packing-field" id="fba-profit-pack-length" label="长度方向" unit="个" value={input.packCountLength} step={1} min={1} onChange={(value) => updateInput("packCountLength", value)} />
-                  <NumericField className="fba-profit__packing-field" id="fba-profit-pack-width" label="宽度方向" unit="个" value={input.packCountWidth} step={1} min={1} onChange={(value) => updateInput("packCountWidth", value)} />
-                  <NumericField className="fba-profit__packing-field" id="fba-profit-pack-height" label="高度方向" unit="层" value={input.packCountHeight} step={1} min={1} onChange={(value) => updateInput("packCountHeight", value)} />
+                  <NumericField className="fba-profit__packing-field" id="fba-profit-pack-length" label="长度方向" unit="个" value={input.packCountLength} step={1} min={1} required onChange={(value) => updateInput("packCountLength", value)} />
+                  <NumericField className="fba-profit__packing-field" id="fba-profit-pack-width" label="宽度方向" unit="个" value={input.packCountWidth} step={1} min={1} required onChange={(value) => updateInput("packCountWidth", value)} />
+                  <NumericField className="fba-profit__packing-field" id="fba-profit-pack-height" label="高度方向" unit="层" value={input.packCountHeight} step={1} min={1} required onChange={(value) => updateInput("packCountHeight", value)} />
                 </div>
                 <p className="fba-profit__hint">总装箱数＝长度方向数量 × 宽度方向数量 × 高度层数。产品尺寸、重量或装箱方法变化后，整箱数据自动重算。</p>
                 <div className="fba-profit__section fba-profit__field-grid">
@@ -445,6 +504,16 @@ function FbaProfitCalculator() {
             <section className="fba-profit__card">
               <div className="fba-profit__card-head"><h2>测算结果</h2></div>
               <div className="fba-profit__result-body">
+                {!coreInputReady ? (
+                  <>
+                    <div className="fba-profit__tier">—</div>
+                    <p className="fba-profit__tier-sub">待补齐核心必填后显示 FBA 费用、头程运费与利润结果</p>
+                    <div className="fba-profit__validation" role="status">
+                      当前已完成 {completedRequirementCount}/{requirements.length} 项；空白状态不输出费用和利润，避免把系统兜底值当成真实测算。
+                    </div>
+                  </>
+                ) : (
+                  <>
                 <div className="fba-profit__tier">{result.unit.sizeTier ?? "暂无法识别 Size Tier"}</div>
                 <p className="fba-profit__tier-sub">
                   计费重 {fixed(result.unit.billableWeightLb, 3)} lb · 判断重 {fixed(result.unit.determinationWeightLb, 3)} lb · 体积 {fixed(result.unit.volumeCubicFeet, 4)} ft³ · {result.unit.sizeTierCategory ?? "待补齐有效输入"}
@@ -498,6 +567,8 @@ function FbaProfitCalculator() {
                   <a href={REFERENCE_SOURCE_URL} target="_blank" rel="noreferrer">固定版本参考模型</a>、
                   <a href={AMAZON_FBA_SOURCE_URL} target="_blank" rel="noreferrer">Amazon US FBA 费率说明</a>。
                 </div>
+                  </>
+                )}
               </div>
             </section>
           </aside>

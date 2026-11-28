@@ -25,6 +25,7 @@ import {
   type InventoryResult,
 } from "./lib/inventory";
 import { numberInputValue } from "./lib/input";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 
 const OFFICIAL_STORAGE_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/G3EDYEF6KUCFQTNM";
 const OFFICIAL_AGED_INVENTORY_RULE = "https://sellercentral.amazon.com/help/hub/reference/external/GJQNPA23YWVA4SBD?locale=en-US";
@@ -36,6 +37,15 @@ function localDateString(): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateDaysAgoString(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
@@ -67,6 +77,37 @@ function createDefaultInput(): InventoryInput {
     firstMileCostPerUnit: null,
     recoveryRate: 0.075,
     forecastMonths: 0,
+  };
+}
+
+function createDemoInput(): InventoryInput {
+  const currentDate = localDateString();
+  return {
+    sku: "DEMO-SKU",
+    asin: "DEMO-ASIN",
+    productName: "演示产品（不可用于决策）",
+    currentInventory: 420,
+    packageLengthCm: 35,
+    packageWidthCm: 24.5,
+    packageHeightCm: 7.5,
+    actualWeightKg: 0.6,
+    averageDailySales: 2.5,
+    inboundDate: dateDaysAgoString(240),
+    currentDate,
+    dangerousGoods: false,
+    utilizationEligible: false,
+    utilizationWeeks: 18,
+    storageSeason: getStorageSeasonFromDate(currentDate),
+    customAgedRate: null,
+    agedSurchargeEarlyTierExempt: false,
+    removalQuantity: 420,
+    customRemovalFee: null,
+    liquidationQuantity: 420,
+    averageSellingPrice: 20,
+    unitCost: 8,
+    firstMileCostPerUnit: 2.5,
+    recoveryRate: 0.075,
+    forecastMonths: 12,
   };
 }
 
@@ -130,13 +171,14 @@ async function writeClipboard(text: string): Promise<void> {
   }
 }
 
-function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
+function buildSummaryRows(input: InventoryInput, result: InventoryResult, isDemo = false) {
   const recoveryPending = "待补齐回收输入";
   const pnlPending = "待补齐 P&L 输入";
   const packagePending = "待补齐包装参数";
   const profile = result.packageClassification;
   const removalReady = profile.valid || (input.customRemovalFee !== null && input.customRemovalFee > 0);
   return [
+    { 分区: "数据性质", 项目: "决策使用", 数值: isDemo ? "演示数据，不可用于决策" : "用户录入数据" },
     { 分区: "基础信息", 项目: "SKU", 数值: input.sku },
     { 分区: "基础信息", 项目: "ASIN", 数值: input.asin },
     { 分区: "基础信息", 项目: "产品名称", 数值: input.productName },
@@ -186,10 +228,10 @@ function buildSummaryRows(input: InventoryInput, result: InventoryResult) {
   ];
 }
 
-async function exportInventoryWorkbook(input: InventoryInput, result: InventoryResult): Promise<void> {
+async function exportInventoryWorkbook(input: InventoryInput, result: InventoryResult, isDemo = false): Promise<void> {
   const XLSX = await import("xlsx");
   const workbook = XLSX.utils.book_new();
-  const summarySheet = XLSX.utils.json_to_sheet(buildSummaryRows(input, result));
+  const summarySheet = XLSX.utils.json_to_sheet(buildSummaryRows(input, result, isDemo));
   const forecastSheet = XLSX.utils.json_to_sheet(result.forecast.map((row) => ({
     月份: row.month,
     仓储季节: storageSeasonLabel(row.storageSeason),
@@ -206,9 +248,9 @@ async function exportInventoryWorkbook(input: InventoryInput, result: InventoryR
   XLSX.writeFile(workbook, "FBA_Inventory_Cost.xlsx");
 }
 
-async function exportInventoryCsv(input: InventoryInput, result: InventoryResult): Promise<void> {
+async function exportInventoryCsv(input: InventoryInput, result: InventoryResult, isDemo = false): Promise<void> {
   const XLSX = await import("xlsx");
-  const worksheet = XLSX.utils.json_to_sheet(buildSummaryRows(input, result));
+  const worksheet = XLSX.utils.json_to_sheet(buildSummaryRows(input, result, isDemo));
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory Cost");
   XLSX.writeFile(workbook, "FBA_Inventory_Cost.csv", { bookType: "csv" });
@@ -217,6 +259,7 @@ async function exportInventoryCsv(input: InventoryInput, result: InventoryResult
 function InventoryCostSimulator() {
   const [input, setInput] = useState<InventoryInput>(() => createDefaultInput());
   const [copied, setCopied] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const result = useMemo(() => calculateInventoryCosts(input), [input]);
   const packageProfile = result.packageClassification;
   const removalConfigured = packageProfile.valid || (input.customRemovalFee !== null && input.customRemovalFee > 0);
@@ -233,6 +276,19 @@ function InventoryCostSimulator() {
   const liquidationStatusText = result.liquidationQuantity <= 0
     ? "请先填写清货数量"
     : "请补齐 ASP、采购成本、头程与包装参数";
+  const requirements = [
+    { label: "当前库存大于 0", met: input.currentInventory > 0 },
+    { label: "平均日销大于 0", met: input.averageDailySales > 0 },
+    { label: "入仓日期与当前日期有效", met: result.inventoryAgeReady },
+    { label: "包装长、宽、高均大于 0", met: input.packageLengthCm > 0 && input.packageWidthCm > 0 && input.packageHeightCm > 0 },
+    { label: "含包装实际重量大于 0", met: input.actualWeightKg > 0 },
+    { label: "未来持有成本推演月数大于 0", met: input.forecastMonths > 0 },
+    ...(input.liquidationQuantity > 0 ? [
+      { label: "清货 ASP 大于 0", met: input.averageSellingPrice > 0 },
+      { label: "清货采购成本大于 0", met: input.unitCost > 0 },
+      { label: "清货头程成本已填写（可为 0）", met: input.firstMileCostPerUnit !== null },
+    ] : []),
+  ];
 
   const update = (key: keyof InventoryInput, value: InventoryInput[keyof InventoryInput]) => {
     setInput((current) => ({ ...current, [key]: value } as InventoryInput));
@@ -241,6 +297,7 @@ function InventoryCostSimulator() {
   const copyResult = async () => {
     const text = [
       "【FBA 库存成本推演】",
+      isDemo ? "数据性质：演示数据，不可用于决策" : "数据性质：用户录入数据",
       `SKU：${input.sku || "未填写"}`,
       `ASIN：${input.asin || "未填写"}`,
       `当前库存：${input.currentInventory} 件`,
@@ -279,7 +336,15 @@ function InventoryCostSimulator() {
     window.setTimeout(() => setCopied(false), 1600);
   };
 
-  const reset = () => setInput(createDefaultInput());
+  const loadDemo = () => {
+    setInput(createDemoInput());
+    setIsDemo(true);
+  };
+
+  const reset = () => {
+    setInput(createDefaultInput());
+    setIsDemo(false);
+  };
 
   return (
     <main className="main-content inventory-main">
@@ -294,6 +359,16 @@ function InventoryCostSimulator() {
           <a className="rule-link" href={OFFICIAL_STORAGE_RULE} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Amazon 官方规则</a>
         </div>
       </header>
+
+      <ToolSetupPanel
+        requirements={requirements}
+        isDemo={isDemo}
+        onLoadDemo={loadDemo}
+        onReset={reset}
+        title="库存成本推演输入准备"
+        description="基础库存、库龄、包装和推演周期齐全后，才能形成完整持有成本判断。"
+        demoMessage="当前库存、成本和退出方案均为演示数字，仅用于查看仓储、移除和清货的计算流程，不可直接用于库存处置决策。"
+      />
 
       <div className="inventory-page">
         <div className="inventory-workspace">
@@ -315,23 +390,23 @@ function InventoryCostSimulator() {
             <div className="inventory-form-section">
               <div className="section-label"><Gauge size={15} /> 库存与周转</div>
               <div className="inventory-form-grid">
-                <label className="field-label"><span>当前库存（件）</span><input type="number" min="0" step="1" value={numberInputValue(input.currentInventory)} onChange={(event) => update("currentInventory", integer(event.target.value))} /></label>
-                <label className="field-label"><span>平均日销</span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageDailySales)} onChange={(event) => update("averageDailySales", numeric(event.target.value))} /></label>
-                <label className="field-label"><span>ASP / 平均售价（$/件）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageSellingPrice)} onChange={(event) => update("averageSellingPrice", numeric(event.target.value))} /></label>
-                <label className="field-label"><span>采购成本（$/件）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitCost)} onChange={(event) => update("unitCost", numeric(event.target.value))} /></label>
-                <label className="field-label"><span>头程成本（$/件，可填 0）</span><input type="number" min="0" step="0.01" value={numberInputValue(input.firstMileCostPerUnit)} onChange={(event) => update("firstMileCostPerUnit", event.target.value === "" ? null : numeric(event.target.value))} /></label>
-                <label className="field-label"><span>入仓日期</span><input type="date" value={input.inboundDate} onChange={(event) => update("inboundDate", event.target.value)} /></label>
-                <label className="field-label"><span>当前日期</span><input type="date" value={input.currentDate} onChange={(event) => update("currentDate", event.target.value)} /></label>
+                <label className="field-label"><span>当前库存（件）<RequiredBadge /></span><input type="number" min="0" step="1" value={numberInputValue(input.currentInventory)} onChange={(event) => update("currentInventory", integer(event.target.value))} /></label>
+                <label className="field-label"><span>平均日销<RequiredBadge /></span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageDailySales)} onChange={(event) => update("averageDailySales", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>ASP / 平均售价（$/件）<RequiredBadge label="清货时必填" /></span><input type="number" min="0" step="0.01" value={numberInputValue(input.averageSellingPrice)} onChange={(event) => update("averageSellingPrice", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>采购成本（$/件）<RequiredBadge label="清货时必填" /></span><input type="number" min="0" step="0.01" value={numberInputValue(input.unitCost)} onChange={(event) => update("unitCost", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>头程成本（$/件，可填 0）<RequiredBadge label="清货时必填" /></span><input type="number" min="0" step="0.01" value={numberInputValue(input.firstMileCostPerUnit)} onChange={(event) => update("firstMileCostPerUnit", event.target.value === "" ? null : numeric(event.target.value))} /></label>
+                <label className="field-label"><span>入仓日期<RequiredBadge /></span><input type="date" value={input.inboundDate} onChange={(event) => update("inboundDate", event.target.value)} /></label>
+                <label className="field-label"><span>当前日期<RequiredBadge /></span><input type="date" value={input.currentDate} onChange={(event) => update("currentDate", event.target.value)} /></label>
               </div>
             </div>
 
             <div className="inventory-form-section">
               <div className="section-label"><Scale size={15} /> 单品包装与 Amazon 计费</div>
               <div className="inventory-form-grid">
-                <label className="field-label"><span>包装长（cm）</span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageLengthCm)} onChange={(event) => update("packageLengthCm", numeric(event.target.value))} /></label>
-                <label className="field-label"><span>包装宽（cm）</span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageWidthCm)} onChange={(event) => update("packageWidthCm", numeric(event.target.value))} /></label>
-                <label className="field-label"><span>包装高（cm）</span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageHeightCm)} onChange={(event) => update("packageHeightCm", numeric(event.target.value))} /></label>
-                <label className="field-label"><span>含包装实际重量（kg）</span><input type="number" min="0" step="0.001" value={numberInputValue(input.actualWeightKg)} onChange={(event) => update("actualWeightKg", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>包装长（cm）<RequiredBadge /></span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageLengthCm)} onChange={(event) => update("packageLengthCm", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>包装宽（cm）<RequiredBadge /></span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageWidthCm)} onChange={(event) => update("packageWidthCm", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>包装高（cm）<RequiredBadge /></span><input type="number" min="0" step="0.1" value={numberInputValue(input.packageHeightCm)} onChange={(event) => update("packageHeightCm", numeric(event.target.value))} /></label>
+                <label className="field-label"><span>含包装实际重量（kg）<RequiredBadge /></span><input type="number" min="0" step="0.001" value={numberInputValue(input.actualWeightKg)} onChange={(event) => update("actualWeightKg", numeric(event.target.value))} /></label>
               </div>
               <small className="inventory-field-hint">三边无需按大小排序；系统会自动计算体积、Size Tier、Dimensional Weight 与 Shipping Weight。</small>
 
@@ -400,7 +475,7 @@ function InventoryCostSimulator() {
                 </label>
                 {input.customRemovalFee !== null && <label className="rate-input"><span>$ / 件</span><input type="number" min="0" step="0.01" value={numberInputValue(input.customRemovalFee)} onChange={(event) => update("customRemovalFee", numeric(event.target.value))} /></label>}
               </div>
-              <label className="field-label forecast-field"><span>未来持有成本推演（月）</span><input type="number" min="1" max="24" step="1" value={numberInputValue(input.forecastMonths)} onChange={(event) => update("forecastMonths", event.target.value === "" ? 0 : Math.min(24, Math.max(1, integer(event.target.value))))} /></label>
+              <label className="field-label forecast-field"><span>未来持有成本推演（月）<RequiredBadge /></span><input type="number" min="1" max="24" step="1" value={numberInputValue(input.forecastMonths)} onChange={(event) => update("forecastMonths", event.target.value === "" ? 0 : Math.min(24, Math.max(1, integer(event.target.value))))} /></label>
             </div>
           </section>
 
@@ -423,8 +498,8 @@ function InventoryCostSimulator() {
               </div>
               <div className="inventory-hero-actions">
                 <button type="button" onClick={copyResult}>{copied ? <Check size={15} /> : <Copy size={15} />}{copied ? "已复制" : "复制"}</button>
-                <button type="button" onClick={() => exportInventoryWorkbook(input, result)}><FileSpreadsheet size={15} /> Excel</button>
-                <button type="button" onClick={() => exportInventoryCsv(input, result)}><Download size={15} /> CSV</button>
+                <button type="button" onClick={() => exportInventoryWorkbook(input, result, isDemo)}><FileSpreadsheet size={15} /> Excel</button>
+                <button type="button" onClick={() => exportInventoryCsv(input, result, isDemo)}><Download size={15} /> CSV</button>
               </div>
             </div>
 

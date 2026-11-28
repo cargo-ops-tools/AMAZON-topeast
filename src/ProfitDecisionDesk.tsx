@@ -22,6 +22,7 @@ import { MARKETPLACE_CONFIG, type SalesSite } from "./lib/profit";
 import { getDefaultReferralCategory, getReferralFeeCategories } from "./lib/referralFees";
 import { numberInputValue } from "./lib/input";
 import NumberInput from "./NumberInput";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 import {
   DEFAULT_PROMOTION_PHASES,
   DEFAULT_SCENARIOS,
@@ -84,6 +85,71 @@ const DEFAULT_INPUT: SimulationInput = {
   phases: DEFAULT_PROMOTION_PHASES,
   monthlyPlans: Array.from({ length: 6 }, (_, index) => ({ month: index + 1 })),
 };
+
+const DEMO_INPUT: SimulationInput = {
+  product: {
+    asin: "B0TEST1234",
+    sku: "SIM-001",
+    name: "示例产品",
+    salesSite: "US",
+    category: "Home & Kitchen",
+    referralCategory: "home-kitchen",
+    lifecycle: "new",
+    plannedMonths: 6,
+  },
+  sales: {
+    listPrice: 29.99,
+    monthlyOrders: 1000,
+    couponRate: 0.1,
+    couponOrderShare: 0.5,
+    dealRate: 0,
+    dealOrderShare: 0,
+    promotionEnabled: false,
+    promotionRate: 0,
+    promotionOrderShare: 0,
+    promotionStacking: "prevent",
+    adOrderShare: 0.5,
+    advertisingMode: "acos",
+    acos: 0.3,
+    monthlyAdSpend: 0,
+  },
+  costs: {
+    productCost: 6,
+    packagingCost: 0.5,
+    firstMileCost: 1.2,
+    fbaFee: 4.8,
+    storageFee: 0.2,
+    otherAmazonFee: 0.1,
+    returnRate: 0.05,
+    refundWithoutReturnRate: 0.01,
+    unsellableReturnRate: 0.3,
+    averageReturnLoss: 1,
+    otherAfterSalesLossPerOrder: 0.1,
+    otherPromotionCost: 100,
+    fixedOperatingCost: 500,
+  },
+  targets: { targetProfitMargin: 0.15, targetMonthlyProfit: 5000, maximumAllowedLoss: 10000 },
+  phases: DEFAULT_PROMOTION_PHASES,
+  monthlyPlans: [
+    { month: 1, orders: 500, acos: 0.5 },
+    { month: 2, orders: 700, acos: 0.4 },
+    { month: 3, orders: 900, acos: 0.35 },
+    { month: 4 },
+    { month: 5, orders: 1200, acos: 0.25 },
+    { month: 6, orders: 1400, acos: 0.2 },
+  ],
+};
+
+function cloneSimulationInput(source: SimulationInput): SimulationInput {
+  return {
+    product: { ...source.product },
+    sales: { ...source.sales },
+    costs: { ...source.costs },
+    targets: { ...source.targets },
+    phases: source.phases.map((phase) => ({ ...phase })),
+    monthlyPlans: source.monthlyPlans.map((plan) => ({ ...plan })),
+  };
+}
 
 const percentKeys = new Set([
   "couponRate", "couponOrderShare", "dealRate", "dealOrderShare", "promotionRate", "promotionOrderShare",
@@ -152,12 +218,13 @@ function SimulationChart({ months, series, markers = [] }: { months: string[]; s
 }
 
 function ProfitDecisionDesk() {
-  const [input, setInput] = useState(DEFAULT_INPUT);
+  const [input, setInput] = useState(() => cloneSimulationInput(DEFAULT_INPUT));
   const [activeTab, setActiveTab] = useState<DeskTab>("inputs");
   const [selectedMonth, setSelectedMonth] = useState(1);
   const [scenarioConfigs, setScenarioConfigs] = useState<ScenarioAdjustment[]>(DEFAULT_SCENARIOS);
   const [showPhases, setShowPhases] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const result = useMemo(() => calculateSimulation(input), [input]);
   const scenarios = useMemo(() => compareScenarios(input, scenarioConfigs), [input, scenarioConfigs]);
   const errors = useMemo(() => validateSimulationInput(input), [input]);
@@ -215,12 +282,23 @@ function ProfitDecisionDesk() {
   };
 
   const clearAllData = () => {
-    setInput(DEFAULT_INPUT);
-    setScenarioConfigs(DEFAULT_SCENARIOS);
+    setInput(cloneSimulationInput(DEFAULT_INPUT));
+    setScenarioConfigs(DEFAULT_SCENARIOS.map((scenario) => ({ ...scenario })));
     setSelectedMonth(1);
     setActiveTab("inputs");
     setShowPhases(false);
     setCopied(false);
+    setIsDemo(false);
+  };
+
+  const loadDemo = () => {
+    setInput(cloneSimulationInput(DEMO_INPUT));
+    setScenarioConfigs(DEFAULT_SCENARIOS.map((scenario) => ({ ...scenario })));
+    setSelectedMonth(1);
+    setActiveTab("inputs");
+    setShowPhases(false);
+    setCopied(false);
+    setIsDemo(true);
   };
 
   const updatePhase = (id: string, key: "name" | "endDay" | "objective", rawValue: string) => {
@@ -239,6 +317,7 @@ function ProfitDecisionDesk() {
   const copyConclusion = async () => {
     const conclusion = [
       "【经营结论】",
+      `数据性质：${isDemo ? "演示数据，不可用于决策" : "用户录入数据"}`,
       `产品：${input.product.name || "未填写"}`,
       `当前利润状态：${result.decision.statusText}`,
       `推广阶段：${result.decision.currentStage}`,
@@ -258,10 +337,10 @@ function ProfitDecisionDesk() {
     window.setTimeout(() => setCopied(false), 1600);
   };
 
-  const field = (label: string, section: "sales" | "costs" | "targets", key: string, options: { percent?: boolean; prefix?: string; suffix?: string } = {}) => {
+  const field = (label: string, section: "sales" | "costs" | "targets", key: string, options: { percent?: boolean; prefix?: string; suffix?: string; required?: boolean } = {}) => {
     const raw = Number(input[section][key as keyof typeof input[typeof section]] ?? 0);
     const value = options.percent ? raw * 100 : raw;
-    return <label className="sim-field"><span>{label}</span><div>{options.prefix && <b>{options.prefix}</b>}<NumberInput min="0" step={options.percent ? "0.1" : "0.01"} value={value} onRawChange={(rawValue) => updateNumber(section, key, rawValue)} />{options.suffix && <em>{options.suffix}</em>}</div></label>;
+    return <label className="sim-field"><span>{label}{options.required && <RequiredBadge />}</span><div>{options.prefix && <b>{options.prefix}</b>}<NumberInput min="0" step={options.percent ? "0.1" : "0.01"} value={value} onRawChange={(rawValue) => updateNumber(section, key, rawValue)} />{options.suffix && <em>{options.suffix}</em>}</div></label>;
   };
 
   const monthField = (label: string, key: keyof Omit<MonthlyPlanOverride, "month">, options: { percent?: boolean; prefix?: string; suffix?: string } = {}) => {
@@ -278,6 +357,22 @@ function ProfitDecisionDesk() {
       </header>
 
       <div className="sim-page">
+        <ToolSetupPanel
+          requirements={[
+            { label: "ASIN", met: input.product.asin.trim().length > 0 },
+            { label: "产品名称", met: input.product.name.trim().length > 0 },
+            { label: "产品类目节点", met: input.product.category.trim().length > 0 },
+            { label: "Referral Fee 类目", met: input.product.referralCategory.trim().length > 0 },
+            { label: "计划推演周期", met: input.product.plannedMonths >= 1 && input.product.plannedMonths <= 12 },
+            { label: "List Price", met: input.sales.listPrice > 0 },
+            { label: "基础月销量", met: input.sales.monthlyOrders > 0 },
+          ]}
+          isDemo={isDemo}
+          onLoadDemo={loadDemo}
+          onReset={clearAllData}
+          demoMessage="当前为推演演示样板，请替换产品、售价、销量、成本和月度推广计划后再判断资金缺口与回本周期。"
+        />
+
         <section className={`sim-hero risk-${result.decision.riskLevel}`}>
           <div className="sim-hero-title"><span>当前经营结果</span><strong>{currentMonth ? <Currency symbol={symbol} value={currentMonth.operatingProfit} /> : "--"}</strong><p>末月单月经营利润 · {currentMonth ? `${roundDisplay(currentMonth.profitMargin * 100, 1)}%` : "0.0%"}</p></div>
           <div className="sim-hero-metrics">
@@ -306,16 +401,16 @@ function ProfitDecisionDesk() {
           <section className="sim-card">
             <div className="sim-card-head"><CircleDollarSign size={18} /><div><h2>产品与销售</h2><p>站点决定币种，类目节点自动推荐佣金规则</p></div></div>
             <div className="sim-form-grid three">
-              <label className="sim-field"><span>ASIN *</span><input value={input.product.asin} onChange={(event) => updateProduct("asin", event.target.value)} /></label>
+              <label className="sim-field"><span>ASIN <RequiredBadge /></span><input value={input.product.asin} onChange={(event) => updateProduct("asin", event.target.value)} /></label>
               <label className="sim-field"><span>SKU</span><input value={input.product.sku} onChange={(event) => updateProduct("sku", event.target.value)} /></label>
-              <label className="sim-field"><span>产品名称 *</span><input value={input.product.name} onChange={(event) => updateProduct("name", event.target.value)} /></label>
+              <label className="sim-field"><span>产品名称 <RequiredBadge /></span><input value={input.product.name} onChange={(event) => updateProduct("name", event.target.value)} /></label>
               <label className="sim-field"><span>Amazon 站点</span><select value={input.product.salesSite} onChange={(event) => updateSite(event.target.value as SalesSite)}>{Object.entries(MARKETPLACE_CONFIG).map(([site, config]) => <option key={site} value={site}>{site} · {config.currency}</option>)}</select></label>
-              <label className="sim-field"><span>产品类目节点</span><select value={input.product.category} onChange={(event) => updateCategory(event.target.value)}><option value="">请选择类目节点</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
-              <label className="sim-field"><span>Referral Fee 类目</span><select value={input.product.referralCategory} onChange={(event) => updateProduct("referralCategory", event.target.value)}><option value="">请选择佣金类目</option>{referralCategories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select></label>
+              <label className="sim-field"><span>产品类目节点 <RequiredBadge /></span><select value={input.product.category} onChange={(event) => updateCategory(event.target.value)}><option value="">请选择类目节点</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+              <label className="sim-field"><span>Referral Fee 类目 <RequiredBadge /></span><select value={input.product.referralCategory} onChange={(event) => updateProduct("referralCategory", event.target.value)}><option value="">请选择佣金类目</option>{referralCategories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</select></label>
               <label className="sim-field"><span>生命周期</span><select value={input.product.lifecycle} onChange={(event) => updateProduct("lifecycle", event.target.value)}><option value="new">新品</option><option value="growth">成长期</option><option value="mature">成熟期</option><option value="decline">衰退期</option></select></label>
-              <label className="sim-field"><span>计划推演周期</span><div><input type="number" min="1" max="12" value={input.product.plannedMonths} onChange={(event) => updateMonths(event.target.value)} /><em>个月</em></div></label>
-              {field("List Price", "sales", "listPrice", { prefix: symbol })}
-              {field("基础月销量", "sales", "monthlyOrders", { suffix: "单" })}
+              <label className="sim-field"><span>计划推演周期 <RequiredBadge /></span><div><input type="number" min="1" max="12" value={input.product.plannedMonths} onChange={(event) => updateMonths(event.target.value)} /><em>个月</em></div></label>
+              {field("List Price", "sales", "listPrice", { prefix: symbol, required: true })}
+              {field("基础月销量", "sales", "monthlyOrders", { suffix: "单", required: true })}
               {field("Coupon", "sales", "couponRate", { percent: true, suffix: "%" })}
               {field("Coupon 订单占比", "sales", "couponOrderShare", { percent: true, suffix: "%" })}
               {field("Deal 折扣", "sales", "dealRate", { percent: true, suffix: "%" })}

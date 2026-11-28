@@ -6,11 +6,10 @@ import {
   Clipboard,
   Download,
   Info,
-  RotateCcw,
   ShieldAlert,
-  Sparkles,
   Target,
 } from "lucide-react";
+import ToolSetupPanel, { RequiredBadge } from "./ToolSetupPanel";
 import {
   EMPTY_LISTING_SCORE_INPUT,
   calculateListingScore,
@@ -142,6 +141,7 @@ function NumericField({
   value,
   onChange,
   hint,
+  badge,
   min,
   max,
   step = "any",
@@ -150,13 +150,14 @@ function NumericField({
   value: number | null;
   onChange: (value: number | null) => void;
   hint?: string;
+  badge?: string;
   min?: number;
   max?: number;
   step?: number | "any";
 }) {
   return (
     <label className="listing-score-field">
-      <span>{label}</span>
+      <span>{label}{badge && <RequiredBadge label={badge} />}</span>
       <input
         type="number"
         value={value ?? ""}
@@ -176,15 +177,17 @@ function BooleanField({
   value,
   onChange,
   hint,
+  badge,
 }: {
   label: string;
   value: boolean | null;
   onChange: (value: boolean | null) => void;
   hint?: string;
+  badge?: string;
 }) {
   return (
     <label className="listing-score-field">
-      <span>{label}</span>
+      <span>{label}{badge && <RequiredBadge label={badge} />}</span>
       <select
         value={value === null ? "" : value ? "yes" : "no"}
         onChange={(event) => onChange(event.target.value === "" ? null : event.target.value === "yes")}
@@ -205,6 +208,12 @@ function ListingScorePanel() {
   const [isSample, setIsSample] = useState(false);
   const result = useMemo(() => calculateListingScore(input), [input]);
   const hasData = result.dataCompleteness > 0;
+  const setupRequirements = [
+    { label: "至少录入 1 个有效评分指标", met: hasData },
+    { label: "数据完整度达到 80%", met: result.dataCompleteness >= 80 },
+    { label: "已确认链接是否被抑制", met: input.risk.listingSuppressed !== null },
+    { label: "已完成侵权 / TRO 风险排查", met: input.risk.ipTroRisk !== null },
+  ];
 
   const updateField = <
     Group extends keyof ListingScoreInput,
@@ -285,11 +294,17 @@ function ListingScorePanel() {
           <h2 id="listing-score-title">链接经营评分</h2>
           <p>用相对类目/竞品基准评估内容、流量、转化、Review、利润广告和风险</p>
         </div>
-        <div>
-          <button type="button" onClick={loadSample}><Sparkles size={16} /> 填入示例</button>
-          <button type="button" onClick={clear}><RotateCcw size={16} /> 清空</button>
-        </div>
       </div>
+
+      <ToolSetupPanel
+        requirements={setupRequirements}
+        isDemo={isSample}
+        onLoadDemo={loadSample}
+        onReset={clear}
+        title="链接经营评分输入准备"
+        description="初步评分至少需要 1 个有效指标；用于 A/S 级经营判断时，还要满足完整度和风险确认条件。"
+        demoMessage="当前为链接经营评分演示数据，即使局部修改也不可直接用于预算、采购或链接分级决策。"
+      />
 
       <details className="listing-grade-guide">
         <summary>
@@ -316,12 +331,6 @@ function ListingScorePanel() {
           </div>
         </div>
       </details>
-
-      {isSample && (
-        <div className="listing-sample-banner" role="status">
-          <Info size={17} /> 当前包含演示数据；即使局部修改也不可直接用于决策。请清空后录入同一 ASIN、同一观察窗口的真实数据。
-        </div>
-      )}
 
       <section className="listing-score-hero" aria-live="polite">
         <div className="listing-score-primary">
@@ -379,10 +388,10 @@ function ListingScorePanel() {
             <details>
               <summary>流量与 Keyword <b>20 分</b></summary>
               <div className="listing-field-grid">
-                <NumericField label="CTR %" value={input.traffic.ctr} onChange={(value) => updateField("traffic", "ctr", value)} min={0} max={100} hint="例：0.42 表示 0.42%" />
-                <NumericField label="类目 CTR 基准 %" value={input.traffic.categoryCtr} onChange={(value) => updateField("traffic", "categoryCtr", value)} min={0} max={100} />
-                <NumericField label="Organic Top 10 Keyword 数" value={input.traffic.organicTop10Keywords} onChange={(value) => updateField("traffic", "organicTop10Keywords", value)} min={0} step={1} />
-                <NumericField label="竞品中位 Top 10 数" value={input.traffic.competitorMedianOrganicTop10Keywords} onChange={(value) => updateField("traffic", "competitorMedianOrganicTop10Keywords", value)} min={0} step={1} />
+                <NumericField label="CTR %" badge="成对必填" value={input.traffic.ctr} onChange={(value) => updateField("traffic", "ctr", value)} min={0} max={100} hint="例：0.42 表示 0.42%" />
+                <NumericField label="类目 CTR 基准 %" badge="成对必填" value={input.traffic.categoryCtr} onChange={(value) => updateField("traffic", "categoryCtr", value)} min={0} max={100} />
+                <NumericField label="Organic Top 10 Keyword 数" badge="成对必填" value={input.traffic.organicTop10Keywords} onChange={(value) => updateField("traffic", "organicTop10Keywords", value)} min={0} step={1} />
+                <NumericField label="竞品中位 Top 10 数" badge="成对必填" value={input.traffic.competitorMedianOrganicTop10Keywords} onChange={(value) => updateField("traffic", "competitorMedianOrganicTop10Keywords", value)} min={0} step={1} />
                 <NumericField label="BSR 30 天变化 %" value={input.traffic.bsrChange30d} onChange={(value) => updateField("traffic", "bsrChange30d", value)} hint="负数代表排名改善" />
               </div>
             </details>
@@ -390,20 +399,20 @@ function ListingScorePanel() {
             <details>
               <summary>转化竞争力 <b>20 分</b></summary>
               <div className="listing-field-grid">
-                <NumericField label="CVR / Unit Session %" value={input.conversion.cvr} onChange={(value) => updateField("conversion", "cvr", value)} min={0} max={100} />
-                <NumericField label="类目 CVR 基准 %" value={input.conversion.categoryCvr} onChange={(value) => updateField("conversion", "categoryCvr", value)} min={0} max={100} />
-                <NumericField label="退货率 %" value={input.conversion.returnRate} onChange={(value) => updateField("conversion", "returnRate", value)} min={0} max={100} />
-                <NumericField label="类目退货率基准 %" value={input.conversion.categoryReturnRate} onChange={(value) => updateField("conversion", "categoryReturnRate", value)} min={0} max={100} />
+                <NumericField label="CVR / Unit Session %" badge="成对必填" value={input.conversion.cvr} onChange={(value) => updateField("conversion", "cvr", value)} min={0} max={100} />
+                <NumericField label="类目 CVR 基准 %" badge="成对必填" value={input.conversion.categoryCvr} onChange={(value) => updateField("conversion", "categoryCvr", value)} min={0} max={100} />
+                <NumericField label="退货率 %" badge="成对必填" value={input.conversion.returnRate} onChange={(value) => updateField("conversion", "returnRate", value)} min={0} max={100} />
+                <NumericField label="类目退货率基准 %" badge="成对必填" value={input.conversion.categoryReturnRate} onChange={(value) => updateField("conversion", "categoryReturnRate", value)} min={0} max={100} />
               </div>
             </details>
 
             <details>
               <summary>Review 健康度 <b>20 分</b></summary>
               <div className="listing-field-grid">
-                <NumericField label="Review 数" value={input.review.reviewCount} onChange={(value) => updateField("review", "reviewCount", value)} min={0} step={1} />
-                <NumericField label="竞品中位 Review 数" value={input.review.competitorMedianReviewCount} onChange={(value) => updateField("review", "competitorMedianReviewCount", value)} min={0} step={1} />
-                <NumericField label="前台 Rating" value={input.review.rating} onChange={(value) => updateField("review", "rating", value)} min={1} max={5} step={0.1} />
-                <NumericField label="类目 Rating 基准" value={input.review.categoryRating} onChange={(value) => updateField("review", "categoryRating", value)} min={1} max={5} step={0.1} />
+                <NumericField label="Review 数" badge="成对必填" value={input.review.reviewCount} onChange={(value) => updateField("review", "reviewCount", value)} min={0} step={1} />
+                <NumericField label="竞品中位 Review 数" badge="成对必填" value={input.review.competitorMedianReviewCount} onChange={(value) => updateField("review", "competitorMedianReviewCount", value)} min={0} step={1} />
+                <NumericField label="前台 Rating" badge="成对必填" value={input.review.rating} onChange={(value) => updateField("review", "rating", value)} min={1} max={5} step={0.1} />
+                <NumericField label="类目 Rating 基准" badge="成对必填" value={input.review.categoryRating} onChange={(value) => updateField("review", "categoryRating", value)} min={1} max={5} step={0.1} />
                 <NumericField label="1–3 星占比 %" value={input.review.lowStarRate} onChange={(value) => updateField("review", "lowStarRate", value)} min={0} max={100} />
               </div>
             </details>
@@ -413,10 +422,10 @@ function ListingScorePanel() {
               <div className="listing-field-grid">
                 <NumericField label="月利润" value={input.profitAds.monthlyProfit} onChange={(value) => updateField("profitAds", "monthlyProfit", value)} hint="仅用于负利润红线" />
                 <NumericField label="利润率 %" value={input.profitAds.profitMargin} onChange={(value) => updateField("profitAds", "profitMargin", value)} />
-                <NumericField label="实际 TACoS %" value={input.profitAds.actualTacos} onChange={(value) => updateField("profitAds", "actualTacos", value)} min={0} />
-                <NumericField label="Break-even TACoS %" value={input.profitAds.breakEvenTacos} onChange={(value) => updateField("profitAds", "breakEvenTacos", value)} min={0} />
-                <NumericField label="实际 CPC" value={input.profitAds.actualCpc} onChange={(value) => updateField("profitAds", "actualCpc", value)} min={0} />
-                <NumericField label="最大安全 CPC" value={input.profitAds.maxSafeCpc} onChange={(value) => updateField("profitAds", "maxSafeCpc", value)} min={0} />
+                <NumericField label="实际 TACoS %" badge="成对必填" value={input.profitAds.actualTacos} onChange={(value) => updateField("profitAds", "actualTacos", value)} min={0} />
+                <NumericField label="Break-even TACoS %" badge="成对必填" value={input.profitAds.breakEvenTacos} onChange={(value) => updateField("profitAds", "breakEvenTacos", value)} min={0} />
+                <NumericField label="实际 CPC" badge="成对必填" value={input.profitAds.actualCpc} onChange={(value) => updateField("profitAds", "actualCpc", value)} min={0} />
+                <NumericField label="最大安全 CPC" badge="成对必填" value={input.profitAds.maxSafeCpc} onChange={(value) => updateField("profitAds", "maxSafeCpc", value)} min={0} />
               </div>
             </details>
 
@@ -424,9 +433,9 @@ function ListingScorePanel() {
               <summary>风险与合规 <b>5 分</b></summary>
               <div className="listing-field-grid">
                 <NumericField label="库存覆盖天数" value={input.risk.stockCoverageDays} onChange={(value) => updateField("risk", "stockCoverageDays", value)} min={0} />
-                <BooleanField label="链接是否被抑制" value={input.risk.listingSuppressed} onChange={(value) => updateField("risk", "listingSuppressed", value)} />
+                <BooleanField label="链接是否被抑制" badge="S级必填" value={input.risk.listingSuppressed} onChange={(value) => updateField("risk", "listingSuppressed", value)} />
                 <label className="listing-score-field">
-                  <span>侵权 / TRO 风险</span>
+                  <span>侵权 / TRO 风险 <RequiredBadge label="S级必填" /></span>
                   <select value={input.risk.ipTroRisk ?? ""} onChange={(event) => updateField("risk", "ipTroRisk", (event.target.value || null) as IpTroRisk | null)}>
                     <option value="">待排查</option>
                     <option value="none">无已知风险</option>
