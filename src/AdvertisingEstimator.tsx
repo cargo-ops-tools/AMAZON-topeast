@@ -316,6 +316,9 @@ function AdvertisingEstimator() {
     { id: "scope-verified", ready: result.readiness.scopeVerified, label: "已确认日期区间、归因窗口、时区、币种及得分快照口径" },
   ];
   const missingCoreRequirements = coreRequirements.filter((item) => !item.ready);
+  const scopeConfirmationAvailable = coreRequirements
+    .filter((item) => item.id !== "scope-verified")
+    .every((item) => item.ready);
 
   useEffect(() => {
     try {
@@ -580,13 +583,20 @@ function AdvertisingEstimator() {
               <div className="ad-readiness-heading">
                 <div>
                   <strong>{result.readiness.coreReady ? "核心测算条件已齐备" : `结果暂未生成：还缺 ${missingCoreRequirements.length} 项`}</strong>
-                  <span>{result.readiness.coreReady ? "基础花费和订单占比已经可以计算，是否可用于决策仍需看模型质量。" : "下面直接列出“—”的原因；逐项补齐后会自动出结果。"}</span>
+                  <span>{result.readiness.coreReady ? "基础花费和订单占比已经可以计算，是否可用于决策仍需看模型质量。" : scopeConfirmationAvailable ? "数据已经齐全，点击下方按钮确认口径后立即计算。" : "下面直接列出“—”的原因；先补齐其他必填项。"}</span>
                 </div>
                 <b>{coreRequirements.length - missingCoreRequirements.length}/{coreRequirements.length}</b>
               </div>
               <div className="ad-readiness-list">
                 {coreRequirements.map((item) => <div className={item.ready ? "ready" : "missing"} key={item.id}>{item.ready ? <Check size={14} /> : <AlertTriangle size={14} />}<span>{item.label}</span></div>)}
               </div>
+              {!calibrationScopeVerified && <div className="ad-readiness-action">
+                <div>
+                  <strong>{scopeConfirmationAvailable ? "最后一步：确认样本口径" : "确认按钮将在其他项目齐全后启用"}</strong>
+                  <span>{scopeConfirmationAvailable ? "我已确认样本与目标的日期区间、归因窗口、报表时区、币种及得分快照口径一致。" : "请先完成上方未通过的必填项，最后再确认口径。"}</span>
+                </div>
+                <button className="ad-confirm-scope-button" type="button" disabled={!scopeConfirmationAvailable} onClick={() => setCalibrationScopeVerified(true)}><Check size={16} />确认口径并开始计算</button>
+              </div>}
             </div>
             <div className="ad-result-grid">
               <ResultMetric label="观察期广告花费" value={formatMoney(result.target.estimatedSpend, site)} detail={`组合情景 P25–P75 ${formatInterval(result.target.intervals.estimatedSpend, (value) => formatMoney(value, site))}`} tone="accent" />
