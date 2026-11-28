@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>产品图生成 · 亚马逊工具箱</title><link rel="stylesheet" href="studio.css"><script src="studio.js" defer></script></head>
+<body>
+<header class="tool-heading"><div><h1>产品图生成</h1><p>从 Billfish 选款，生成或修改效果图，按款号保存评审意见。</p></div><button id="helpBtn">使用说明</button></header>
+<main><section class="project"><div class="project-actions"><label>当前款式<select id="projects" aria-label="切换款式"></select></label><button id="newProject">＋ 新建款式</button></div><span class="hint">草稿保存在当前浏览器</span></section>
+<div class="columns"><section class="panel"><div class="panelhead"><h2>设计输入</h2></div>
+<label for="code">款号或款名</label><input id="code" maxlength="90" placeholder="例如：通勤托特 023">
+<div class="assets">
+<div><label for="original">原款图</label><button class="drop" id="original" type="button" aria-label="添加或更换原款图">拖入或选图</button><button class="link" id="clearOriginal" hidden>移除原款</button></div>
+<div><label for="reference">参考图 <i>可选</i></label><button class="drop" id="reference" type="button" aria-label="添加或更换参考图">拖入或选图</button><button class="link" id="clearRef" hidden>移除参考</button></div></div>
+<label id="refLabel" for="refRole">这张参考图用在哪里</label><input id="refRole" maxlength="240" placeholder="例如：只参考前袋的斜切开口">
+<label>本轮操作</label><div id="modes" class="modes" aria-label="本轮操作"></div>
+<label for="brief">设计要求</label><textarea rows="3" id="brief" placeholder="例如：把包身换成沙色哑光尼龙，提手沿用原款"></textarea>
+<label for="base">本轮底图</label><select id="base"></select>
+<details class="prompt"><summary>查看本轮提示词</summary><pre id="prompt"></pre></details>
+<div class="actionrow"><button id="manual" class="primary">复制提示词</button><a class="button" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">打开 ChatGPT</a></div>
+<div class="actionrow"><button id="sendBase" class="link" hidden>下载本轮底图</button><button id="sendRef" class="link" hidden>下载参考图</button></div>
+<button id="api" class="api" hidden>调用 API 生成</button>
+<p id="actionHint" class="hint">复制后，将本轮底图和参考图依次附到 ChatGPT。下载生成图后拖入右侧。</p>
+<details class="bridge"><summary id="bridgeSummary">连接本机 API，在本页生成</summary>
+<ol><li>准备 Node.js 20 或更高版本，<a download href="./topeast-image-bridge.cjs">下载本机生图服务</a>。</li>
+<li>在下载目录打开终端，执行 <code>node topeast-image-bridge.cjs</code>，在终端输入 OpenAI API Key。</li>
+<li>将终端显示的配对码填入下框。浏览器询问访问本机网络时，选择允许。</li></ol>
+<label for="pairCode">本次配对码</label><input id="pairCode" type="password" autocomplete="off" placeholder="粘贴终端显示的配对码">
+<button id="connect">连接服务</button> <button id="disconnect" hidden>断开</button><p id="bridgeStatus" class="hint" role="status"></p>
+<p class="hint">仅点击 API 生成或拆款时发送本轮图片，费用计入本机使用的 API 账户。</p></details>
+</section><section class="panel review"><div class="panelhead"><h2>方案评审</h2><span id="count" class="count">0 个候选</span></div>
+<div class="compare"><figure><div id="baseline" class="frame empty">原款预览</div><figcaption>原款</figcaption></figure><figure><div id="candidate" class="frame empty">候选方案预览</div><figcaption id="candidateLabel">候选方案</figcaption></figure></div>
+<div id="importArea" class="import"><button id="import">＋ 导入候选图</button><span>可拖入多张 JPG、PNG</span></div>
+<div id="versions" class="versions" aria-label="选择候选方案"></div>
+<div id="reviewOps" hidden><div class="actionrow"><button id="pick" class="accent">选定此方案</button><button id="reuse">用此版继续改</button></div>
+<label for="note">本版评审意见</label><textarea id="note" rows="2" placeholder="例如：选 B，拉链改哑银，安排打样。"></textarea>
+<div class="actionrow"><button id="export" class="button">导出此版图片</button><button id="record" class="link">导出评审记录</button><button id="folder" class="link" hidden>设置归档文件夹</button></div><div id="folderNote" class="hint"></div></div>
+<details class="analysis"><summary>拆款文字</summary><textarea id="analysis" rows="5" placeholder="在这里保存 ChatGPT 返回的拆款说明。API 拆款会自动填入。"></textarea><button id="saveAnalysis">导出拆款文字</button></details>
+<p id="status" role="status" aria-live="polite"></p></section></div>
+</main>
+<dialog id="help"><h2>工作台怎么用</h2><ol>
+<li>新建款式，填写款号。从 Billfish 把原图、参考图分别拖进对应框。拖入无反应时，先从 Billfish 导出 JPG 或 PNG，再点击框选图。</li>
+<li>选择拆款、新款、换色、换料或改结构。写明参考图的用途和本轮要求。点击「复制提示词」，在 ChatGPT 附上对应图片并粘贴提示词。</li>
+<li>把下载的效果图拖入「导入候选图」。点缩略图比较版本，填写意见，选定方案。要在某一版上继续，点「用此版继续改」。</li>
+<li>点「导出此版图片」，把下载文件拖回 Billfish 的对应款号文件夹。也可以点「设置归档文件夹」，选择本机的评审目录，此次打开工作台期间，图片和评审记录将直接导出到该目录。</li>
+<li>款式和图片保存在当前浏览器。换电脑或清除浏览器数据前，先导出需要保留的图片和评审记录。</li>
+<li>要在本页直接生成，展开「连接本机 API」，按说明启动并配对。API Key 只在本机终端输入。关闭终端即可停止服务。</li>
+</ol><button id="closeHelp" class="primary">知道了</button></dialog>
+<input type="file" accept="image/jpeg,image/png" id="file" hidden><input type="file" accept="image/jpeg,image/png" id="results" multiple hidden>
+</body></html>
