@@ -5,7 +5,7 @@ export interface CalibrationSample {
   name: string;
   adScore: number;
   organicScore: number;
-  /** 空白表示未录入；0 表示报表确认零点击，二者不能混为一谈。 */
+  /** 对应 observationDays 的窗口期累计点击；空白表示未录入，0 表示报表确认零点击。 */
   adClicks: number | null;
   adSpend: number;
   cpcProxy: number;
@@ -58,13 +58,13 @@ export const ADVERTISING_MODEL_FORMULAS: readonly AdvertisingFormulaDefinition[]
   {
     id: "click-scale",
     title: "点击换算系数 k",
-    formula: "单个样本：kᵢ = 真实广告点击数 Cᵢ ÷ 广告得分 Aᵢ；总体 k 取所有有效 kᵢ 的中位数",
-    logic: "意思是：1 分广告得分大约对应多少次真实广告点击。",
+    formula: "单个样本：kᵢ = Dᵢ 天窗口期累计真实广告点击数 Cᵢ ÷ 同窗口广告得分 Aᵢ；总体 k 取所有有效 kᵢ 的中位数",
+    logic: "意思是：同一个 D 天窗口内，1 分广告得分大约对应多少次累计真实广告点击。",
   },
   {
     id: "cpc-scale",
     title: "单次点击费用换算系数 m",
-    formula: "单个样本：mᵢ =（真实广告花费 Sᵢ ÷ 真实广告点击数 Cᵢ）÷ 费用代理值 bᵢ；总体 m 取所有有效 mᵢ 的中位数",
+    formula: "单个样本：mᵢ =（同一 Dᵢ 天窗口期累计真实广告花费 Sᵢ ÷ 同窗口累计真实广告点击数 Cᵢ）÷ 费用代理值 bᵢ；总体 m 取所有有效 mᵢ 的中位数",
     logic: "意思是：费用代理值需要乘以多少，才更接近真实的单次点击费用。",
   },
   {
@@ -76,8 +76,8 @@ export const ADVERTISING_MODEL_FORMULAS: readonly AdvertisingFormulaDefinition[]
   {
     id: "target-estimate",
     title: "目标竞品估算",
-    formula: "预估广告点击数 = k × 竞品广告得分；预估单次点击费用 = m × 竞品费用代理值；预估广告花费 = 预估广告点击数 × 预估单次点击费用；广告归因订单占比 = λ × 广告得分 ÷（λ × 广告得分 + 自然得分）",
-    logic: "系统自动校验唯一样本、站点、渠道和窗口天数；日期区间、归因窗口、时区及得分快照需由用户确认一致。",
+    formula: "预估 D 天窗口累计广告点击数 = k × 竞品广告得分；预估单次点击费用 = m × 竞品费用代理值；预估 D 天窗口累计广告花费 = 预估累计广告点击数 × 预估单次点击费用；广告归因订单占比 = λ × 广告得分 ÷（λ × 广告得分 + 自然得分）",
+    logic: "C、S、Q 和广告归因订单都必须是同一 D 天窗口的累计值；系统自动校验唯一样本、站点、渠道和窗口天数，其余报表口径需由用户确认一致。",
   },
   {
     id: "safety-line",
@@ -479,8 +479,8 @@ export function calculateAdvertisingEstimate(
   if (clickObservations.length < 10) warnings.push(`点击尺度仅有 ${clickObservations.length} 个唯一有效样本；3–9 个只作参考，建议至少积累 10 个同类 ASIN。`);
   if (cpcObservations.length < 10) warnings.push(`CPC 尺度仅有 ${cpcObservations.length} 个唯一有效样本；3–9 个只作参考，建议至少积累 10 个同类 ASIN。`);
   if (orderObservations.length < 10) warnings.push(`订单倾向仅有 ${orderObservations.length} 个唯一有效样本；3–9 个只作参考，建议至少积累 10 个同类 ASIN。`);
-  if (clickObservations.length === 0) warnings.push("没有有效的点击尺度样本：需要唯一 ASIN/编号、有效观察窗口、A > 0，并明确录入真实 Clicks（确认零点击可填 0，空白不参与）。");
-  if (cpcObservations.length === 0) warnings.push("没有有效的 CPC 校准样本：需要唯一 ASIN/编号、真实点击、真实花费和 CPC 代理 > 0。");
+  if (clickObservations.length === 0) warnings.push("没有有效的点击尺度样本：需要唯一 ASIN/编号、有效窗口天数 D、A > 0，并明确录入与 D 对应的窗口期累计真实广告点击 C（确认零点击可填 0，空白不参与）。");
+  if (cpcObservations.length === 0) warnings.push("没有有效的 CPC 校准样本：需要唯一 ASIN/编号、同一 D 天窗口的累计真实广告点击 C、累计真实广告花费 S，以及 CPC 代理 > 0。");
   if (orderObservations.length === 0) warnings.push("没有有效的订单倾向样本：需要唯一 ASIN/编号、Q > 0、0 ≤ Ad Orders ≤ Q，且 A、O 均大于 0。");
   if (prepared.missingIdentityCount > 0) warnings.push(`有 ${prepared.missingIdentityCount} 行已录入数据但缺少 ASIN/唯一编号，已排除校准。`);
   if (prepared.duplicateSampleCount > 0) warnings.push(`发现 ${prepared.duplicateSampleCount} 行重复样本，质量等级只按唯一样本计算。`);

@@ -595,7 +595,7 @@ function AdvertisingEstimator() {
               <ResultMetric label="广告归因单占比" value={formatPercent(result.target.adOrderShare)} detail={`情景 P25–P75 ${formatInterval(result.target.intervals.adOrderShare, (value) => formatPercent(value))}`} tone="success" />
             </div>
             <div className="ad-result-detail-grid">
-              <div><span>估算广告点击</span><strong>{formatNumber(result.target.estimatedClicks, 1)}</strong></div>
+              <div><span>{target.observationDays || 0} 天累计广告点击</span><strong>{formatNumber(result.target.estimatedClicks, 1)}</strong></div>
               <div><span>广告流量得分占比</span><strong>{formatPercent(result.target.trafficShare)}</strong></div>
               <div><span>估算广告归因订单</span><strong>{formatNumber(result.target.estimatedAdOrders, 1)}</strong></div>
               <div><span>非广告归因订单</span><strong>{formatNumber(result.target.estimatedNonAdOrders, 1)}</strong></div>
@@ -627,38 +627,38 @@ function AdvertisingEstimator() {
             <label className="ad-scope-confirm"><input type="checkbox" checked={calibrationScopeVerified} onChange={(event) => setCalibrationScopeVerified(event.target.checked)} /><span><b>核心必填：</b>我确认整组样本彼此、并与目标竞品采用同一日期区间、归因窗口、报表时区、币种及得分快照口径；系统不会自动换币种或重标旧数据。修改样本或目标核心输入后需重新确认。</span></label>
           </div>
           <div className="ad-sample-requirements" aria-label="校准样本必填说明">
-            <div><strong>点击样本</strong><span>编号 + 天数 + 广告得分 A + 真实点击 C</span></div>
-            <div><strong>费用样本</strong><span>编号 + 天数 + C＞0 + 真实花费 S + 代理值 b</span></div>
-            <div><strong>订单样本</strong><span>编号 + 天数 + A + O + 总订单 Q + 广告归因订单</span></div>
+            <div><strong>点击样本</strong><span>编号 + 窗口天数 D + 同窗口广告得分 A + D 天累计点击 C</span></div>
+            <div><strong>费用样本</strong><span>编号 + 窗口天数 D + C＞0 + 同期累计花费 S + 代理值 b</span></div>
+            <div><strong>订单样本</strong><span>编号 + 窗口天数 D + A + O + 同期总订单 Q + 同期广告归因订单</span></div>
             <p>三类样本可以来自不同 ASIN；未知数据请留空，只有报表明确为 0 时才填 0。</p>
           </div>
           <div className="ad-table-wrap">
             <table className="ad-sample-table">
-              <thead><tr><th>样本 ASIN / 唯一编号 <em>每行必填</em></th><th>窗口天数 <em>每行必填</em></th><th>广告得分 A <small>点击/订单</small></th><th>自然得分 O <small>订单</small></th><th>真实广告点击 C <small>点击/费用</small></th><th>真实花费 S <small>费用</small></th><th>CPC 代理 b <small>费用</small></th><th>总订单 Q <small>订单</small></th><th>广告归因订单 <small>订单</small></th><th>操作</th></tr></thead>
+              <thead><tr><th>样本 ASIN / 唯一编号 <em>每行必填</em></th><th>窗口天数 D <em>每行必填</em></th><th>广告得分 A <small>同窗口得分</small></th><th>自然得分 O <small>同窗口得分</small></th><th>窗口期广告点击 C <small>D 天累计点击</small></th><th>窗口期广告花费 S <small>D 天累计花费</small></th><th>CPC 代理 b <small>同窗口代理值</small></th><th>窗口期总订单 Q <small>D 天累计订单</small></th><th>窗口期广告归因订单 <small>D 天累计订单</small></th><th>操作</th></tr></thead>
               <tbody>
                 {samples.length === 0 ? <tr><td colSpan={10} className="ad-empty-row">暂无校准样本，请增加样本或载入文档示例。</td></tr> : samples.map((sample) => <tr key={sample.id}>
                   <td data-label="样本 ASIN / 编号"><input className="ad-sample-name" value={sample.asin} onChange={(event) => updateSample(sample.id, "asin", event.target.value.toUpperCase())} placeholder="必填，用于去重" /></td>
-                  <td data-label="窗口天数"><input type="number" min="1" step="1" value={sample.observationDays || ""} onChange={(event) => updateSample(sample.id, "observationDays", numericValue(event.target.value))} placeholder="大于 0" /></td>
+                  <td data-label="窗口天数 D"><input type="number" min="1" step="1" value={sample.observationDays || ""} onChange={(event) => updateSample(sample.id, "observationDays", numericValue(event.target.value))} placeholder="大于 0" /></td>
                   <td data-label="广告得分 A"><input type="number" min="0" step="1" value={sample.adScore || ""} onChange={(event) => updateSample(sample.id, "adScore", numericValue(event.target.value))} placeholder="大于 0" /></td>
                   <td data-label="自然得分 O"><input type="number" min="0" step="1" value={sample.organicScore || ""} onChange={(event) => updateSample(sample.id, "organicScore", numericValue(event.target.value))} placeholder="大于 0" /></td>
-                  <td data-label="真实广告点击 C"><input type="number" min="0" step="1" value={sample.adClicks ?? ""} onChange={(event) => updateSample(sample.id, "adClicks", optionalNumericValue(event.target.value))} placeholder="零点击填 0" /></td>
-                  <td data-label="真实花费 S"><div className="ad-table-money"><b>{calibrationCurrency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.adSpend || ""} onChange={(event) => updateSample(sample.id, "adSpend", numericValue(event.target.value))} placeholder="大于 0" /></div></td>
+                  <td data-label="窗口期广告点击 C"><input type="number" min="0" step="1" value={sample.adClicks ?? ""} onChange={(event) => updateSample(sample.id, "adClicks", optionalNumericValue(event.target.value))} placeholder="填 D 天累计；零点击填 0" /></td>
+                  <td data-label="窗口期广告花费 S"><div className="ad-table-money"><b>{calibrationCurrency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.adSpend || ""} onChange={(event) => updateSample(sample.id, "adSpend", numericValue(event.target.value))} placeholder="填 D 天累计" /></div></td>
                   <td data-label="CPC 代理 b"><div className="ad-table-money"><b>{calibrationCurrency?.symbol ?? "¤"}</b><input type="number" min="0" step="0.01" value={sample.cpcProxy || ""} onChange={(event) => updateSample(sample.id, "cpcProxy", numericValue(event.target.value))} placeholder="大于 0" /></div></td>
-                  <td data-label="总订单 Q"><input type="number" min="0" step="1" value={sample.totalOrders || ""} onChange={(event) => updateSample(sample.id, "totalOrders", numericValue(event.target.value))} placeholder="大于 0" /></td>
-                  <td data-label="广告归因订单"><input type="number" min="0" step="1" value={sample.adOrders ?? ""} onChange={(event) => updateSample(sample.id, "adOrders", optionalNumericValue(event.target.value))} placeholder="0 到总订单 Q" /></td>
+                  <td data-label="窗口期总订单 Q"><input type="number" min="0" step="1" value={sample.totalOrders || ""} onChange={(event) => updateSample(sample.id, "totalOrders", numericValue(event.target.value))} placeholder="填 D 天累计" /></td>
+                  <td data-label="窗口期广告归因订单"><input type="number" min="0" step="1" value={sample.adOrders ?? ""} onChange={(event) => updateSample(sample.id, "adOrders", optionalNumericValue(event.target.value))} placeholder="D 天累计，0 到 Q" /></td>
                   <td data-label="操作"><button className="icon-button" type="button" onClick={() => removeSample(sample.id)} title="删除样本" aria-label={`删除${sample.asin || sample.name}`}><Trash2 size={15} /></button></td>
                 </tr>)}
               </tbody>
             </table>
           </div>
-          <div className="ad-sample-note"><Scale size={14} /><span>每个 ASIN / 唯一编号只计 1 个独立样本；重复行自动去重，冲突行整组排除。系统自动校验站点、渠道和窗口天数，其余报表口径由上方勾选确认。</span></div>
+          <div className="ad-sample-note"><Scale size={14} /><span>同一行的点击 C、花费 S、总订单 Q 和广告归因订单必须全部对应该行的 D 天窗口。每个 ASIN / 唯一编号只计 1 个独立样本；重复行自动去重，冲突行整组排除。</span></div>
         </section>
 
         <div className="ad-bottom-grid">
           <section className="ad-panel ad-calibration-panel">
             <div className="ad-panel-heading"><div><span>04</span><div><h2>校准系数</h2><p>中位数用于常规估算，第 25～第 75 百分位用于上下限情景</p></div></div><BarChart3 size={18} /></div>
             <div className="ad-coefficient-list">
-              <div><span>点击换算系数 k</span><strong>{formatNumber(result.scales.clickScale, 4)}</strong><small>点击数 C ÷ 广告得分 A 的中位数 · {result.observations.clickScale.length} 个唯一样本</small></div>
+              <div><span>点击换算系数 k</span><strong>{formatNumber(result.scales.clickScale, 4)}</strong><small>D 天累计点击 C ÷ 同窗口广告得分 A 的中位数 · {result.observations.clickScale.length} 个唯一样本</small></div>
               <div><span>单次点击费用换算系数 m</span><strong>{formatNumber(result.scales.cpcScale, 4)}</strong><small>真实单次点击费用 ÷ 费用代理值 b 的中位数 · {result.observations.cpcScale.length} 个唯一样本</small></div>
               <div><span>广告订单倾向系数 λ</span><strong>{formatNumber(result.scales.orderTendency, 4)}</strong><small>各样本订单倾向系数的中位数 · {result.observations.orderTendency.length} 个唯一样本</small></div>
             </div>
