@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock3,
   CircleDollarSign,
+  Images,
   PackageCheck,
   Star,
   TrendingUp,
@@ -17,6 +18,7 @@ import CargoDeclarationCalculator from "./CargoDeclarationCalculator";
 import FbaProfitCalculator from "./FbaProfitCalculator";
 import HourlyAdsAnalysis from "./HourlyAdsAnalysis";
 import InventoryCostSimulator from "./InventoryCostSimulator";
+import ProductImageStudio from "./ProductImageStudio";
 import ProfitDecisionDesk from "./ProfitDecisionDesk";
 import ProfitSimulator from "./ProfitSimulator";
 import ReviewScoreCalculator from "./ReviewScoreCalculator";
@@ -25,6 +27,7 @@ import SalesPromotionPlanPage from "./SalesPromotionPlanPage";
 const MODULE_IDS = [
   "fba",
   "inventory",
+  "product-images",
   "profit",
   "sales-plan",
   "review-score",
@@ -108,6 +111,11 @@ function App() {
             <span><b>库存成本推演</b><small>仓储、移除与清货</small></span>
             <ChevronRight size={16} />
           </button>
+          <button className={`nav-item ${activeModule === "product-images" ? "active" : ""}`} type="button" aria-current={activeModule === "product-images" ? "page" : undefined} onClick={() => selectModule("product-images")}>
+            <Images size={18} />
+            <span><b>产品图生成</b><small>参考图改款与方案评审</small></span>
+            <ChevronRight size={16} />
+          </button>
           <button className={`nav-item ${activeModule === "profit" ? "active" : ""}`} type="button" aria-current={activeModule === "profit" ? "page" : undefined} onClick={() => selectModule("profit")}>
             <CircleDollarSign size={18} />
             <span><b>利润测算器</b><small>运营利润、广告与决策</small></span>
@@ -153,6 +161,7 @@ function App() {
 
       <div className="module-screen" hidden={activeModule !== "fba"}><FbaProfitCalculator /></div>
       <div className="module-screen" hidden={activeModule !== "inventory"}><InventoryCostSimulator /></div>
+      <ProductImageStudio active={activeModule === "product-images"} />
       <div className="module-screen" hidden={activeModule !== "profit"}><ProfitSimulator /></div>
       <div className="module-screen" hidden={activeModule !== "sales-plan"}><SalesPromotionPlanPage /></div>
       <div className="module-screen" hidden={activeModule !== "review-score"}><ReviewScoreCalculator /></div>
